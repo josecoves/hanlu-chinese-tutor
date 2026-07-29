@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Answer · 汉路{% endblock %}
+{% block content %}
+<section class="practice-shell">
+  <div class="practice-top"><a href="/session/end">← End session</a><div class="meter"><i style="width:{{ progress / total * 100 }}%"></i></div><span>{{ progress }} / {{ total }}</span></div>
+  <article class="practice-card reveal">
+    <div class="card-meta"><span class="facet">{{ 'READING · 认读' if q.facet == 'reading-recognition' else 'LISTENING · 听力' }}</span><code>{{ ref }}</code></div>
+    <div class="verdict {{ 'correct' if correct else 'wrong' }}">{{ '✓ Correct' if correct else '✕ Not quite' }}</div>
+    {% if not correct %}<div class="correction"><span>You answered <b>{{ response }}</b></span><span>Correct answer <b>{{ q.correct }}</b></span></div>{% endif %}
+    <div class="sentence">{{ blanked }}</div>
+    {% if q.audio_path %}<audio id="practice-audio" controls src="/audio/{{ q.audio_path }}"></audio>{% endif %}
+    <div class="reveal-details">
+      <details id="pinyin-details"><summary>Show pinyin</summary><p class="pinyin">{{ q.sentence_pinyin }}</p></details>
+      <details id="word-details" class="word-details"><summary>Show detailed word meaning</summary>
+        <div class="word-heading"><b>{{ word.headword }}</b><span>{{ word.pinyin }}</span><em>HSK {{ word.hsk_bands|replace(',', ' · ') }}</em></div>
+        <p class="primary-meaning">{{ word.gloss }}</p>
+        {% if word.note %}<p class="usage-note">{{ word.note }}</p>{% endif %}
+        {% if word.alternatives %}<p><strong>Also said:</strong> {{ word.alternatives|join(' · ') }}</p>{% endif %}
+        {% if word.senses %}<div><strong>Dictionary senses</strong><ul>{% for sense in word.senses %}<li>{{ sense }}</li>{% endfor %}</ul></div>{% endif %}
+        {% if word.examples %}<div><strong>Examples</strong>{% for example in word.examples %}<p class="word-example"><span lang="zh">{{ example.zh }}</span><small>{{ example.pinyin }}</small><em>{{ example.en }}</em></p>{% endfor %}</div>{% endif %}
+        <a class="external-dictionary" href="{{ word.dictionary_url }}" target="_blank" rel="noopener noreferrer">Check {{ word.headword }} in MDBG ↗</a>
+      </details>
+      <details id="translation-details"><summary>Show translation</summary>
+        <p class="translation">{{ q.sentence_en }}</p>
+        <table class="breakdown"><thead><tr><th>Character</th><th>Pinyin</th><th>Meaning</th></tr></thead>
+        <tbody>{% for token in tokens %}<tr><td>{{ token.word }}</td><td>{{ token.pinyin }}</td><td>{{ token.gloss }}</td></tr>{% endfor %}</tbody></table>
+      </details>
+    </div>
+    <p class="shortcut-legend"><kbd>A</kbd> audio · <kbd>P</kbd> pinyin · <kbd>W</kbd> word · <kbd>T</kbd> translation · <kbd>Enter</kbd> next</p>
+    <form class="snooze-word" method="post" action="/item/{{ q.item_id }}/snooze">
+      <span>Not a priority right now?</span>
+      <button name="days" value="7">Pause 1 week</button>
+      <button name="days" value="30">Pause 30 days</button>
+    </form>
+    <form method="get" action="/session/next"><button id="practice-next" class="button primary next">Next <span>→</span></button></form>
+  </article>
+  {% include "_report.html" %}
+</section>
+<script src="/static/practice.js"></script>
+{% endblock %}

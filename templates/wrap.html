@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="wrap">
+  <span class="eyebrow">SESSION COMPLETE · 完成</span><h1>Nice work.</h1>
+  <p>You answered <strong>{{ plan.correct }}</strong> correctly and have <strong>{{ plan.wrong }}</strong> cards returning for another look.</p>
+  <div class="wrap-score"><span>{{ plan.correct }}<small>remembered</small></span><span>{{ plan.wrong }}<small>to revisit</small></span></div>
+  <a class="button primary" href="/session/end">Back to Today →</a>
+</section>
+{% endblock %}

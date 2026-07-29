@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><span class="eyebrow">YOUR KNOWLEDGE MODEL</span><h1>{{ title }}</h1><p>{{ subtitle }}</p>
+  {% if practice_url %}<a class="button primary" href="{{ practice_url }}">{{ practice_label|default('Practice this topic →') }}</a>{% endif %}
+</section>
+<section class="section">
+  <form class="vocab-filters" method="get">
+    <label class="vocab-search"><span>Search</span><input name="q" value="{{ q }}" placeholder="Hanzi, pinyin, or meaning…"></label>
+    <label><span>HSK level</span><select name="hsk"><option value="0">All levels</option>{% for level in (1,2,3) %}<option value="{{ level }}" {{ 'selected' if hsk == level else '' }}>HSK {{ level }}</option>{% endfor %}</select></label>
+    <label><span>Practice status</span><select name="practice"><option value="all">All words</option><option value="unpracticed" {{ 'selected' if practice == 'unpracticed' else '' }}>Not practiced</option><option value="practiced" {{ 'selected' if practice == 'practiced' else '' }}>Practiced</option></select></label>
+    <label><span>Sort by</span><select name="sort"><option value="hsk">HSK level</option><option value="hanzi" {{ 'selected' if sort == 'hanzi' else '' }}>Hanzi</option><option value="practiced" {{ 'selected' if sort == 'practiced' else '' }}>Most practiced</option><option value="last" {{ 'selected' if sort == 'last' else '' }}>Recently practiced</option></select></label>
+    <button>Apply</button><a href="{{ clear_url }}">Clear</a>
+  </form>
+  <div class="table-wrap"><table class="vocab-table"><thead><tr><th>Hanzi</th><th>Pinyin</th><th>Meaning</th><th>HSK</th><th>Measure</th><th>Listening</th><th>Reading</th><th>Practiced</th><th>Last</th></tr></thead>
+  <tbody>{% for row in rows %}<tr><td class="hanzi"><a href="{{ row.dictionary_url }}" target="_blank" rel="noopener noreferrer" title="Look up {{ row.headword }} in MDBG">{{ row.headword }} ↗</a></td><td>{{ row.pinyin }}</td><td>{{ row.gloss }}</td><td><span class="hsk-badge hsk-{{ row.primary_hsk }}">HSK {{ row.hsk_bands|replace(',', ' · ') }}</span></td><td>{{ row.measure_word or '—' }}</td>
+    <td>{% if row.listening_score is not none %}<span class="score">{{ row.listening_score }}%</span>{% else %}—{% endif %}</td>
+    <td>{% if row.reading_score is not none %}<span class="score">{{ row.reading_score }}%</span>{% else %}—{% endif %}</td>
+    <td>{{ row.practices }}×{% if row.practices == 0 and (row.listen_card or row.read_card) %} <small>(assumed)</small>{% endif %}</td><td>{{ row.last }}</td></tr>{% else %}<tr><td colspan="9">No words found.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endblock %}

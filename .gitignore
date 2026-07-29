@@ -1,0 +1,16 @@
+.DS_Store
+.venv/
+__pycache__/
+.pytest_cache/
+work/
+outputs/
+*.py[cod]
+
+# Personal learning data and generated runtime state
+data/tutor.db
+data/progress_export.json
+data/audio/*.mp3
+
+# Local secrets and environment
+.env
+.env.*

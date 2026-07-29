@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><span class="eyebrow">EVIDENCE, NOT STREAKS</span><h1>Progress</h1><p>Your recent attempts and the words asking for another look.</p></section>
+<section class="progress-cards"><article><strong>{{ totals.total or 0 }}</strong><span>total attempts</span></article><article><strong>{{ totals.correct or 0 }}</strong><span>remembered</span></article><article><strong>{{ totals.wrong or 0 }}</strong><span>missed</span></article></section>
+<section class="section split">
+  <div><div class="section-heading"><div><span class="eyebrow">FRONTIER</span><h2>Recently missed</h2></div></div>
+  <div class="miss-list">{% for row in misses %}<article><strong>{{ row.headword }}</strong><div><b>{{ row.pinyin }}</b><span>{{ row.gloss }}</span></div></article>{% else %}<p>No misses yet.</p>{% endfor %}</div></div>
+  <div><div class="section-heading"><div><span class="eyebrow">HISTORY</span><h2>Recent attempts</h2></div></div>
+  <div class="attempts">{% for row in recent %}<article><i class="{{ 'good' if row.grade > 1 else 'miss' }}"></i><strong>{{ row.headword }}</strong><span>{{ row.pinyin }} · {{ row.gloss }}</span><small>{{ 'listening' if row.facet == 'listening' else 'reading' }} · {{ relative(row.ts) }}</small></article>{% else %}<p>Start a session to see your history.</p>{% endfor %}</div></div>
+</section>
+{% endblock %}

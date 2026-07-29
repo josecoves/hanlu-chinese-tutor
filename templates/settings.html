@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><span class="eyebrow">TUNE THE LOOP</span><h1>Settings</h1><p>Declare a starting point, then let real practice replace the assumption.</p></section>
+<section class="settings-grid">
+  <form method="post" class="settings-form">
+    <label>Declared HSK band <input type="number" min="0" max="7" name="declared_hsk_band" value="{{ learner.declared_hsk_band }}"></label>
+    <p class="help">Seeds both facets modestly. Lowering the band removes only assumptions you have never practiced.</p>
+    <label>New words per day <input type="number" min="0" max="50" name="daily_new_items" value="{{ settings.daily_new_items }}"></label>
+    <label>Target retention <input type="number" min="0.5" max="0.99" step="0.01" name="desired_retention" value="{{ settings.desired_retention }}"></label>
+    <p class="help">Higher retention means more frequent reviews. 0.90 is a balanced default.</p>
+    <button class="button primary">Save settings</button>
+  </form>
+  <div class="band-samples"><span class="eyebrow">WHAT THE BANDS FEEL LIKE</span>
+  {% for band, words in samples.items() %}<article><b>HSK {{ band }}</b><div>{% for word in words %}<span><strong>{{ word.headword }}</strong>{{ word.gloss }}</span>{% endfor %}</div></article>{% endfor %}</div>
+</section>
+{% endblock %}

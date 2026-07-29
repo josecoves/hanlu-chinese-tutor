@@ -1,0 +1,13 @@
+{% macro sentence(example, prefix, number) -%}
+<article class="grammar-example">
+  <div class="grammar-example-main">
+    <strong lang="zh">{{ example.zh }}</strong>
+    <div class="sentence-tools">
+      <button type="button" class="toggle-pinyin" data-target="{{ prefix }}-pinyin-{{ number }}" aria-expanded="false">P · Pinyin</button>
+      <button type="button" class="speak-chinese" data-zh="{{ example.zh }}">A · Audio</button>
+    </div>
+  </div>
+  <p id="{{ prefix }}-pinyin-{{ number }}" class="example-pinyin" hidden>{{ example.pinyin }}</p>
+  <span>{{ example.en }}</span>
+</article>
+{%- endmacro %}

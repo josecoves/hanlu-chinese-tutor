@@ -1,0 +1,156 @@
+.story-card { display: flex; flex-direction: column; }
+.story-card[data-status="reading"] { border-top: 5px solid var(--yellow); }
+.story-card[data-status="finished"] { border-top: 5px solid var(--jade); }
+.story-card-top {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+.story-card-top form {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+.story-card-top select,
+.reader-state-row select {
+  background: white;
+  border: 1px solid var(--line);
+  font-size: 10px;
+  padding: 6px 8px;
+}
+.story-card-top small,
+.reader-state-row small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.story-reading-progress {
+  margin-top: 18px;
+}
+.story-reading-progress span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.story-reading-progress > i {
+  background: #ded9d0;
+  display: block;
+  height: 5px;
+  margin-top: 6px;
+}
+.story-reading-progress em {
+  background: var(--coral);
+  display: block;
+  height: 100%;
+}
+.story-hard-count {
+  background: #fff2cc;
+  color: #755900 !important;
+  font-size: 10px;
+  margin: 10px 0 0 !important;
+  padding: 7px 9px;
+}
+.story-card > a { margin-top: auto; }
+.reader-state-row {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  margin-top: 22px;
+  padding-bottom: 12px;
+}
+.reader-state-row form {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+.reader-state-row label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.reader-state-row > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.reader-vocabulary {
+  background: var(--cream);
+  border: 1px solid var(--ink);
+  border-top: 0;
+  padding: 18px 22px;
+}
+.reader-vocabulary > div:first-child {
+  align-items: baseline;
+  display: flex;
+  gap: 18px;
+}
+.reader-vocabulary > div:first-child > span {
+  color: var(--coral);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.3px;
+}
+.reader-vocabulary > div:first-child p {
+  color: var(--muted);
+  font-size: 10px;
+  margin: 0;
+}
+#reader-words {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+}
+.reader-word {
+  background: white;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  padding: 9px;
+}
+.reader-word input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+.reader-word b {
+  font: 700 19px var(--serif);
+}
+.reader-word span {
+  align-self: center;
+  color: var(--muted);
+  font-size: 9px;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reader-word em {
+  color: var(--muted);
+  font-size: 9px;
+  font-style: normal;
+}
+.reader-word.hard {
+  background: #fff2cc;
+  border-color: #b98b00;
+}
+.reader-word.hard em {
+  color: #755900;
+  font-weight: 800;
+}
+#reader-save-state {
+  color: #397563;
+  font-size: 10px;
+  margin: 12px 0 0;
+}
+.reader-no-words {
+  color: var(--muted);
+  font-size: 11px;
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 800px) {
+  #reader-words { grid-template-columns: 1fr 1fr; }
+  .reader-vocabulary > div:first-child { align-items: flex-start; flex-direction: column; gap: 4px; }
+}

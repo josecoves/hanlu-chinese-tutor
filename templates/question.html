@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Practice · 汉路{% endblock %}
+{% block content %}
+<section class="practice-shell">
+  <div class="practice-top"><a href="/session/end">← End session</a><div class="meter"><i style="width:{{ progress / total * 100 }}%"></i></div><span>{{ progress }} / {{ total }}</span></div>
+  <article class="practice-card">
+    <div class="card-meta"><span class="facet">{{ 'READING · 认读' if q.facet == 'reading-recognition' else 'LISTENING · 听力' }}</span><code>{{ ref }}</code></div>
+    {% if is_new %}<div class="new-banner">🌱 New word · no pressure — just notice it</div>{% endif %}
+    {% if q.facet == 'reading-recognition' %}
+      <p class="prompt">What does the underlined word mean?</p>
+      <div class="sentence">{{ q.sentence_zh.replace(q.headword, '<u>' + q.headword + '</u>')|safe }}</div>
+      {% if q.audio_path %}<audio id="practice-audio" controls src="/audio/{{ q.audio_path }}"></audio>{% else %}<div class="audio-missing">Audio will appear when generated.</div>{% endif %}
+      <details id="pinyin-details"><summary>Show pinyin</summary><p class="pinyin">{{ q.sentence_pinyin }}</p></details>
+    {% else %}
+      <p class="prompt">Listen, then choose the missing word’s meaning.</p>
+      {% if q.audio_path %}<audio id="practice-audio" controls autoplay src="/audio/{{ q.audio_path }}"></audio>{% else %}<div class="audio-missing">Audio is unavailable for this card. Use context below.</div>{% endif %}
+      <details id="context-details"><summary>Show context</summary><div class="sentence small">{{ q.sentence_zh.replace(q.headword, '＿＿') }}</div></details>
+    {% endif %}
+    <form class="choices" method="post" action="/session/answer">
+      <input type="hidden" name="idx" value="{{ idx }}">
+      {% for choice in q.choices %}<button data-choice-index="{{ loop.index }}" name="response" value="{{ choice }}"><span>{{ loop.index }}</span>{{ choice }}</button>{% endfor %}
+      <button data-dont-know class="dont-know" name="response" value=""><span>0</span>I don’t know</button>
+    </form>
+    <p class="shortcut-legend"><kbd>1–4</kbd> answer · <kbd>0</kbd> don’t know · <kbd>A</kbd> audio · <kbd>P</kbd> pinyin · <kbd>Z</kbd> context</p>
+    <form class="snooze-word" method="post" action="/item/{{ q.item_id }}/snooze">
+      <span>Not a priority right now?</span>
+      <button name="days" value="7">Pause 1 week</button>
+      <button name="days" value="30">Pause 30 days</button>
+    </form>
+  </article>
+  {% include "_report.html" %}
+</section>
+<script src="/static/practice.js"></script>
+{% endblock %}

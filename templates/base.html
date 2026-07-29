@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}汉路 · Chinese Tutor{% endblock %}</title>
+  <meta name="description" content="A local-first Chinese tutor for practical listening and reading.">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/vocabulary.css">
+  <link rel="stylesheet" href="/static/topic-progress.css">
+  <link rel="stylesheet" href="/static/story-progress.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/"><span>汉路</span><small>HANLU · CHINESE TUTOR</small></a>
+    <nav aria-label="Main navigation">
+      <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>Today</a>
+      <a href="/vocab">Vocabulary</a><a href="/topics">Topics</a>
+      <a href="/stories">Stories</a><a href="/grammar">Grammar</a><a href="/progress">Progress</a>
+      <a href="/settings">Settings</a>
+    </nav>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  <footer>
+    <span>Private by design · your learning stays on this machine</span>
+    <a href="/export">Export your data</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Grammar practice · 汉路{% endblock %}
+{% block content %}
+<section class="practice-shell">
+  <div class="practice-top grammar-top"><div class="practice-exits">{% if plan.focus_id %}<a href="/grammar/{{ plan.focus_id }}">← Back to lesson</a><a href="/grammar">End to grammar index</a>{% else %}<a href="/grammar">← End practice</a>{% endif %}</div><span>HSK {{ point.level }} · {{ point.title_en }}</span></div>
+  <article class="practice-card grammar-card">
+    <div class="card-meta"><span class="facet">{{ 'COMPREHENSION · 理解' if plan.direction == 'comprehension' else 'PRODUCTION · 表达' }}</span><span class="hsk-badge">HSK {{ point.level }}</span></div>
+    <p class="prompt">{{ 'Choose the best English translation.' if plan.direction == 'comprehension' else 'Translate this sentence into Chinese.' }}</p>
+    <div class="sentence {{ 'english-prompt' if plan.direction == 'production' }}">{{ plan.prompt }}</div>
+    {% if plan.direction == 'comprehension' %}<div class="prompt-tools">
+      <button type="button" class="toggle-pinyin" data-target="question-pinyin" aria-expanded="false">P · Pinyin</button>
+      <button type="button" class="speak-chinese" data-zh="{{ plan.zh }}">A · Audio</button>
+    </div><p id="question-pinyin" class="example-pinyin centered" hidden>{{ plan.pinyin }}</p>{% endif %}
+    <p class="pattern-reminder">{{ point.pattern }}</p>
+    {% if hints %}<details class="vocab-help"><summary>Vocabulary help · {{ hints|length }} unfamiliar word{{ '' if hints|length == 1 else 's' }}</summary>
+      <div>{% for hint in hints %}<span><b>{{ hint.headword }}</b><i>{{ hint.pinyin }}</i>{{ hint.gloss }} <small>HSK {{ hint.hsk_bands }}</small></span>{% endfor %}</div>
+    </details>{% endif %}
+    <form class="{{ 'choices' if plan.direction == 'comprehension' else 'production-answer' }}" method="post" action="/grammar/answer">
+      {% if plan.direction == 'comprehension' %}
+        {% for choice in choices %}<button data-choice-index="{{ loop.index }}" name="response" value="{{ choice }}"><span>{{ loop.index }}</span>{{ choice }}</button>{% endfor %}
+        <button data-dont-know class="dont-know" name="response" value=""><span>0</span>I don’t know</button>
+      {% else %}
+        <input name="response" lang="zh" autocomplete="off" placeholder="Type your Chinese translation…" autofocus>
+        <button class="button primary">Check answer →</button>
+      {% endif %}
+    </form>
+    {% if plan.direction == 'comprehension' %}<p class="shortcut-legend"><kbd>1–4</kbd> answer · <kbd>0</kbd> don’t know</p>{% endif %}
+  </article>
+  {% set ref = plan.ref %}{% set report_context = plan.zh ~ ' — ' ~ plan.en ~ ' · ' ~ point.title_en %}{% set report_return_to = '/grammar' %}{% include "_report.html" %}
+</section>
+<script src="/static/practice.js"></script>
+<script src="/static/grammar.js"></script>
+{% endblock %}

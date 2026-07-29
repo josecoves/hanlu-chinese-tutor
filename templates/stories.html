@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><span class="eyebrow">CONNECTED PRACTICE · 故事</span><div class="wip-line"><h1>Graded stories</h1><span>Growing library · WIP</span></div><p>Twelve short HSK 1–2 readers. Completing each sentence adds its vocabulary to your study history; flag only the words that still feel hard.</p></section>
+<section class="story-grid">{% for story in stories %}
+<article class="story-card" data-story-status-card data-status="{{ story.status }}">
+  <div class="story-card-top"><span class="story-no">STORY {{ "%02d"|format(loop.index) }}</span>
+    <form method="post" action="/story/{{ story.id }}/status" data-story-status-form><select name="status" aria-label="Status for {{ story.title_en }}"><option value="new" {{ 'selected' if story.status == 'new' else '' }}>New</option><option value="reading" {{ 'selected' if story.status == 'reading' else '' }}>Reading</option><option value="finished" {{ 'selected' if story.status == 'finished' else '' }}>Finished</option></select><small data-save-state></small></form>
+  </div>
+  <h2>{{ story.title_zh }}</h2><p>{{ story.title_en }} · {{ story.sentences }} sentences</p>
+  <div class="story-reading-progress"><span>{{ story.completed_sentences }} / {{ story.sentences }} sentences studied</span><i><em style="width:{{ story.completed_sentences / story.sentences * 100 }}%"></em></i></div>
+  {% if story.hard_words %}<p class="story-hard-count">{{ story.hard_words }} hard word{{ '' if story.hard_words == 1 else 's' }} queued for review</p>{% endif %}
+  <div class="proficiency"><div><i style="width:{{ story.proficiency }}%"></i></div><b>{{ story.proficiency }}%</b><small>vocabulary known · {{ story.known_words }} of {{ story.total_words }} words</small></div>
+  <a href="/story/{{ story.id }}">{{ 'Resume reader' if story.status == 'reading' else 'Open reader' }} →</a>
+</article>{% endfor %}</section>
+<script src="/static/story-status.js"></script>
+{% endblock %}

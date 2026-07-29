@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><span class="eyebrow">EVERYDAY CHINESE</span><h1>Topics</h1><p>See what you know at each HSK level, then practice the next useful gap.</p><small>“Known” includes your declared starting HSK level and words you have answered correctly.</small>
+  <div class="topic-inventory" aria-label="Loaded vocabulary by HSK level">
+    {% for band in inventory %}<div class="{{ 'pending' if not band.total else '' }}"><b>HSK {{ band.level }}</b>{% if band.total %}<strong>{{ band.total }} words</strong><span>Loaded and grouped below</span>{% else %}<strong>Planned</strong><span>Not loaded yet</span>{% endif %}</div>{% endfor %}
+  </div>
+</section>
+<section class="topic-progress-grid">
+{% for topic in topics %}<article class="topic-progress-card">
+  <header><span>{{ "%02d"|format(loop.index) }}</span><div><h2>{{ topic.name }}</h2><p>{{ topic.known }} of {{ topic.total }} words known</p></div><a href="/topic/{{ topic.name|urlencode }}" aria-label="Open {{ topic.name }}">View words →</a></header>
+  <div class="topic-bands">
+    {% for band in topic.bands %}<div class="topic-band {{ 'unavailable' if band.percent is none else '' }}">
+      <div><b>HSK {{ band.level }}</b>{% if band.percent is none %}<span>Not available yet</span>{% else %}<span>{{ band.known }} / {{ band.total }} known</span><strong>{{ band.percent }}%</strong>{% endif %}</div>
+      <i>{% if band.percent is not none %}<em style="width:{{ band.percent }}%"></em>{% endif %}</i>
+      {% if band.percent is not none %}<nav aria-label="HSK {{ band.level }} {{ topic.name }} actions"><a href="/topic/{{ topic.name|urlencode }}?hsk={{ band.level }}">View words</a><a href="/topic/{{ topic.name|urlencode }}/practice?hsk={{ band.level }}">Practice →</a></nav>{% endif %}
+    </div>{% endfor %}
+  </div>
+  {% if topic.suggested_level %}<a class="topic-recommendation" href="/topic/{{ topic.name|urlencode }}/practice?hsk={{ topic.suggested_level }}">Practice HSK {{ topic.suggested_level }} next <span>→</span></a>
+  {% elif topic.total %}<a class="topic-recommendation complete" href="/topic/{{ topic.name|urlencode }}/practice">All available words known · Review anyway <span>→</span></a>{% endif %}
+</article>{% endfor %}
+</section>
+{% endblock %}

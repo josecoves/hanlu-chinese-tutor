@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_grammar_macros.html" import sentence %}
+{% block title %}{{ point.title_en }} · 汉路{% endblock %}
+{% block content %}
+<section class="grammar-detail">
+  <a href="/grammar">← Grammar</a>
+  <div class="grammar-title"><span class="hsk-badge">HSK {{ point.level }} · Lesson {{ lesson_number }} of {{ lesson_total }}</span><span data-status-badge class="lesson-status {{ status }}">{{ 'new' if status == 'not_started' else status|replace('_',' ') }}</span><h1>{{ point.title_zh }}</h1><h2>{{ point.title_en }}</h2></div>
+  <div class="pattern">{{ point.pattern }}</div>
+  <section class="theory-guide">
+    <span class="eyebrow">LESSON GUIDE · 理论</span>
+    <h2>How this pattern works</h2>
+    <div class="theory-intro">{% for paragraph in guide.intro %}<p>{{ paragraph }}</p>{% endfor %}</div>
+    <div class="structure-grid">
+      {% for structure in guide.structures %}<article>
+        <small>{{ structure.label }}</small><code>{{ structure.pattern }}</code><p>{{ structure.body }}</p>
+      </article>{% endfor %}
+    </div>
+    <div class="theory-notes">
+      <div><h3>Things to notice</h3><ul>{% for note in guide.notes %}<li>{{ note }}</li>{% endfor %}</ul></div>
+      <aside><span>COMMON PITFALL</span><p>{{ guide.pitfall }}</p></aside>
+    </div>
+  </section>
+  <section class="worked-examples"><div class="section-heading"><div><span class="eyebrow">WORKED EXAMPLES</span><h2>See it in sentences</h2></div><small>Pinyin and audio are available on every example.</small></div>
+    <div class="example-list">{% for example in examples %}{{ sentence(example, 'detail', loop.index) }}{% endfor %}</div>
+  </section>
+  <section class="lesson-control">
+    <div><span class="eyebrow">YOUR STATUS</span><h3 data-status-name>{{ 'New' if status == 'not_started' else status|replace('_',' ')|title }}</h3>
+      <p>{% if status == 'not_started' %}New lessons stay outside overall grammar practice until you activate them.{% elif status == 'practicing' %}This lesson is included in overall grammar practice.{% else %}Learned lessons stay available here but leave the active practice pool.{% endif %}</p>
+    </div>
+    <form method="post" action="/grammar/{{ point.id }}/status" data-auto-status data-current-status="{{ status }}">
+      <label for="lesson-status">Change status</label>
+      <select id="lesson-status" name="status">
+        <option value="not_started" {{ 'selected' if status == 'not_started' else '' }}>New</option>
+        <option value="practicing" {{ 'selected' if status == 'practicing' else '' }}>Practicing</option>
+        <option value="learned" {{ 'selected' if status == 'learned' else '' }}>Learned</option>
+      </select>
+      <span class="save-state" aria-live="polite">Saved automatically</span>
+    </form>
+  </section>
+  {% if ready_to_learn %}<aside class="mastery-nudge">
+    <div><span>OPTIONAL MASTERY SUGGESTION</span><b>This lesson looks ready.</b><p>Your recent accuracy is at least 80% across five or more attempts. Ignore this suggestion or mark it learned when you feel comfortable.</p></div>
+    <button type="button" data-mark-learned data-target="lesson-status">Mark learned</button>
+  </aside>{% endif %}
+  {% if attempts.attempts %}<p class="lesson-evidence">{{ attempts.correct }} of {{ attempts.attempts }} correct · {{ (attempts.correct / attempts.attempts * 100)|round|int }}% accuracy</p>{% endif %}
+  <div class="grammar-practice-actions"><a class="button primary" href="/grammar/practice/card?grammar_id={{ point.id }}&mode=comprehension">Focus: Chinese → English</a><a class="button quiet" href="/grammar/practice/card?grammar_id={{ point.id }}&mode=production">Focus: English → Chinese</a></div>
+  <nav class="lesson-navigation" aria-label="Next grammar lesson">
+    {% if navigation.next %}<a href="/grammar/{{ navigation.next.id }}"><span>Next lesson · HSK {{ navigation.next.level }} · Lesson {{ navigation.next.lesson_number }}</span><b>{{ navigation.next.title_en }}</b><small>{{ navigation.next.title_zh }}</small></a>{% endif %}
+    {% if navigation.not_started %}<a href="/grammar/{{ navigation.not_started.id }}"><span>Next new · HSK {{ navigation.not_started.level }} · Lesson {{ navigation.not_started.lesson_number }}</span><b>{{ navigation.not_started.title_en }}</b><small>{{ navigation.not_started.title_zh }}</small></a>{% endif %}
+    {% if navigation.practicing %}<a href="/grammar/{{ navigation.practicing.id }}"><span>Next practicing · HSK {{ navigation.practicing.level }} · Lesson {{ navigation.practicing.lesson_number }}</span><b>{{ navigation.practicing.title_en }}</b><small>{{ navigation.practicing.title_zh }}</small></a>{% endif %}
+    {% if navigation.learned %}<a href="/grammar/{{ navigation.learned.id }}"><span>Next learned · HSK {{ navigation.learned.level }} · Lesson {{ navigation.learned.lesson_number }}</span><b>{{ navigation.learned.title_en }}</b><small>{{ navigation.learned.title_zh }}</small></a>{% endif %}
+  </nav>
+</section>
+<script src="/static/grammar.js"></script>
+{% endblock %}

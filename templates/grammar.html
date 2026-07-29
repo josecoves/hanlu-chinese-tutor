@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head"><span class="eyebrow">PATTERNS FOR REAL SENTENCES · 语法</span><div class="wip-line"><h1>Grammar</h1><span>HSK 1–2 complete · HSK 3 WIP</span></div><p>Learn one pattern, add it to your active practice, then mark it learned when it feels comfortable. Overall practice only draws from lessons marked practicing.</p>
+  <div class="grammar-overview">
+    <span><b data-status-count="not_started">{{ status_counts.not_started }}</b> new</span><span><b data-status-count="practicing">{{ status_counts.practicing }}</b> practicing</span><span><b data-status-count="learned">{{ status_counts.learned }}</b> learned</span>
+    <a class="button primary" href="/grammar/practice/card?scope=active&mode=auto">Practice active lessons →</a>
+  </div>
+</section>
+<section class="grammar-filters" aria-label="Filter grammar lessons">
+  <label><span>Find a lesson</span><input id="grammar-search" type="search" placeholder="Search English, Chinese, or a pattern…"></label>
+  <label><span>HSK level</span><select id="grammar-level-filter"><option value="">All levels</option><option value="1">HSK 1</option><option value="2">HSK 2</option><option value="3">HSK 3</option></select></label>
+  <label><span>Status</span><select id="grammar-status-filter"><option value="">All statuses</option><option value="not_started">New</option><option value="practicing">Practicing</option><option value="learned">Learned</option></select></label>
+  <button id="grammar-filter-clear" type="button">Clear</button>
+  <p><b id="grammar-result-count">{{ (levels[1]|length) + (levels[2]|length) + (levels[3]|length) }}</b> lessons shown</p>
+</section>
+<section class="grammar-levels">
+{% for level, points in levels.items() %}
+  <section class="grammar-level" data-grammar-level="{{ level }}">
+    <div class="grammar-level-head"><div><span class="hsk-badge">HSK {{ level }}</span><h2>{{ 'Foundations' if level == 1 else ('Connecting ideas' if level == 2 else 'Flexible expression') }}</h2><p class="curriculum-count">{{ curriculum_meta[level].label }}</p>
+      <div class="level-status-counts"><span><b>{{ curriculum_meta[level].counts.not_started }}</b> new</span><span><b>{{ curriculum_meta[level].counts.practicing }}</b> practicing</span><span><b>{{ curriculum_meta[level].counts.learned }}</b> learned</span></div>
+    </div>
+      <div class="grammar-actions"><a href="/grammar/practice/card?scope=active&level={{ level }}&mode=comprehension">Practice active HSK {{ level }}</a></div>
+    </div>
+    <div class="grammar-grid">
+    {% for point in points %}<article class="grammar-tile" data-status="{{ point.status }}" data-level="{{ level }}" data-search="{{ point.title_zh }} {{ point.title_en|lower }} {{ point.pattern|lower }}">
+      <a href="/grammar/{{ point.id }}">
+        <div><span>HSK {{ level }} · LESSON {{ point.lesson_number }}</span><span class="open-lesson">Open lesson →</span></div>
+        <h3>{{ point.title_zh }}</h3><p>{{ point.title_en }}</p><code>{{ point.pattern }}</code>
+        {% if point.attempts %}<small>{{ (point.correct / point.attempts * 100)|round|int }}% correct · {{ point.attempts }} attempt{{ '' if point.attempts == 1 else 's' }}</small>{% endif %}
+      </a>
+      <form class="inline-status" method="post" action="/grammar/{{ point.id }}/status" data-auto-status data-current-status="{{ point.status }}">
+        <label for="status-{{ point.id }}">Status</label>
+        <select id="status-{{ point.id }}" name="status" aria-label="Status for {{ point.title_en }}">
+          <option value="not_started" {{ 'selected' if point.status == 'not_started' else '' }}>New</option>
+          <option value="practicing" {{ 'selected' if point.status == 'practicing' else '' }}>Practicing</option>
+          <option value="learned" {{ 'selected' if point.status == 'learned' else '' }}>Learned</option>
+        </select>
+        <span class="save-state" aria-live="polite">Auto-saves</span>
+        {% if point.ready_to_learn %}<button type="button" class="mastery-inline" data-mark-learned data-target="status-{{ point.id }}">Ready to learn ✓</button>{% endif %}
+      </form>
+    </article>{% endfor %}
+    </div>
+  </section>
+{% endfor %}
+</section>
+<p class="curriculum-source">Curriculum scope follows the GF 0025–2021 beginner grammar framework. Explanations and examples are original to 汉路.</p>
+<script src="/static/grammar.js"></script>
+{% endblock %}

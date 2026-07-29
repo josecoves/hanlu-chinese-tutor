@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ story.title_en }} · 汉路{% endblock %}
+{% block content %}
+<section class="reader">
+  <div class="reader-head"><a href="/stories">← All stories</a><div><b>{{ story.title_zh }}</b><span>{{ story.title_en }}</span></div><button id="mode">Reading mode</button></div>
+  <div class="reader-state-row"><form method="post" action="/story/{{ story.id }}/status" data-story-status-form><label>Story status <select name="status"><option value="new" {{ 'selected' if status == 'new' else '' }}>New</option><option value="reading" {{ 'selected' if status == 'reading' else '' }}>Reading</option><option value="finished" {{ 'selected' if status == 'finished' else '' }}>Finished</option></select></label><small data-save-state></small></form><span id="sentence-study-count">{{ completed_count }} of {{ sentences|length }} sentences studied</span></div>
+  <div class="reader-count"><span id="position">1 / {{ sentences|length }}</span><div class="meter"><i id="reader-meter"></i></div></div>
+  <article id="reader-card" tabindex="0">
+    <p id="reader-zh"></p><p id="reader-py" hidden></p><p id="reader-en" hidden></p>
+    <audio id="reader-audio" controls hidden></audio>
+  </article>
+  <section class="reader-vocabulary"><div><span>VOCABULARY IN THIS SENTENCE</span><p>Going next marks every word studied. Toggle only the words you want to keep practicing.</p></div><div id="reader-words"></div><p id="reader-save-state" role="status"></p></section>
+  <div class="reader-controls"><button id="prev">← Previous</button><button id="audio">A · Audio</button><button id="characters">Z · Characters</button><button id="pinyin">P · Pinyin</button><button id="translation">T · Translation</button><button id="next">Next →</button></div>
+  <p class="legend"><kbd>←</kbd><kbd>→</kbd> move · <kbd>A</kbd> audio · <kbd>Z</kbd> characters · <kbd>P</kbd> pinyin · <kbd>T</kbd> translation · <kbd>M</kbd> mode</p>
+</section>
+<script id="story-data" type="application/json">{{ {"story_id": story.id, "start_index": start_index, "sentences": sentences}|tojson }}</script>
+<script src="/static/story-status.js"></script>
+<script src="/static/reader.js"></script>
+{% endblock %}

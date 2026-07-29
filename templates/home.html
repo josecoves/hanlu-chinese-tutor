@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div class="eyebrow">TODAY’S PRACTICE · 练习</div>
+  <h1>Train your ear.<br><em>Trust your memory.</em></h1>
+  <p>Practical Chinese, tuned to the edge of what you know. New words begin with reading; listening follows when they’re ready.</p>
+  <div class="hero-actions">
+    <a class="button primary" href="/session/start">Begin today’s session <span>→</span></a>
+    <a class="button quiet" href="/review/start">Reviews only</a>
+  </div>
+</section>
+<section class="today-grid">
+  <article class="stat-card coral"><span class="kicker">DUE NOW</span><strong>{{ due }}</strong><p>review{{ '' if due == 1 else 's' }} ready</p></article>
+  <article class="stat-card yellow"><span class="kicker">NEW TODAY</span><strong>{{ new }}</strong><p>reading-first words</p></article>
+  <article class="stat-card ink"><span class="kicker">LEXICON</span><strong>{{ practiced }}</strong><p>of {{ total }} practiced</p></article>
+  <article class="principle">
+    <span class="kicker">YOUR LEARNING ORDER</span>
+    <ol><li><b>01</b> Listening</li><li><b>02</b> Reading</li><li><b>03</b> Speaking <small>later</small></li></ol>
+  </article>
+</section>
+{% if recent %}
+<section class="section">
+  <div class="section-heading"><div><span class="eyebrow">LATEST SIGNALS</span><h2>Recently practiced</h2></div><a href="/progress">View progress →</a></div>
+  <div class="word-strip">{% for row in recent %}<article><strong>{{ row.headword }}</strong><span>{{ row.pinyin }}</span><p>{{ row.gloss }}</p><i class="{{ 'good' if row.grade > 1 else 'miss' }}">{{ 'remembered' if row.grade > 1 else 'review again' }}</i></article>{% endfor %}</div>
+</section>
+{% endif %}
+{% endblock %}
