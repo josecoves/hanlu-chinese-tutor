@@ -1,6 +1,7 @@
 import json
 import app.web as web_module
 from app.ai_review import AIReviewResult
+from app.content import _apply_story_corrections
 from app.web import _grammar_match, _grammar_vocabulary, _known_headwords
 
 
@@ -177,6 +178,27 @@ def test_story_status_and_sentence_vocabulary_update_progress(client, db):
         row["title_zh"] == "喝茶" and row["headword"] == "茶"
         for row in exported["story_word_exposure"]
     )
+
+
+def test_metro_story_correction_removes_ambiguous_vehicle_reference(db):
+    old_sentences = [{
+        "zh": "车上有很多人。",
+        "en": "There are many people on the train.",
+        "py": "chē shàng yǒu hěn duō rén",
+        "audio": "old.mp3",
+    }]
+    db.execute(
+        "INSERT INTO story(title_zh,title_en,sentences_json) VALUES(?,?,?)",
+        ("坐地铁去学校", "Taking the metro to school",
+         json.dumps(old_sentences, ensure_ascii=False)),
+    )
+    _apply_story_corrections(db)
+    sentence = json.loads(db.execute(
+        "SELECT sentences_json FROM story WHERE title_zh='坐地铁去学校'"
+    ).fetchone()[0])[0]
+    assert sentence["zh"] == "地铁里有很多人。"
+    assert sentence["en"] == "There are many people on the metro."
+    assert sentence["audio"] is None
 
 
 def test_session_is_idempotent(client, db):
@@ -804,7 +826,7 @@ def test_realtime_ai_review_repairs_score_and_tracks_cost(client, db, monkeypatc
         target_grammar_correct=True,
         confidence=0.96,
         explanation="桌子上 and 桌上 are both natural here.",
-        suggested_answer="桌子上有一本书。",
+        suggested_answer="桌上有一本书。",
         differences=("桌子上 is a slightly fuller location phrase.",),
         curriculum_issue=True,
         maintenance_note="Accept 桌子上 as an equivalent to 桌上.",
@@ -816,6 +838,44 @@ def test_realtime_ai_review_repairs_score_and_tracks_cost(client, db, monkeypatc
         cache_miss_tokens=200,
         estimated_cost_usd=0.000062,
     )
+    session_plan = {
+        "grammar_id": grammar_id,
+        "level": 1,
+        "direction": "production",
+        "prompt": "There is a book on the table.",
+        "expected": "桌上有一本书。",
+        "zh": "桌上有一本书。",
+        "en": "There is a book on the table.",
+        "pinyin": "zhuō shàng yǒu yī běn shū",
+        "mode": "production",
+        "ref": "#G2-test",
+        "scope": "",
+        "focus_id": grammar_id,
+        "requested_level": 1,
+        "choices": [],
+        "tested_markers": ["有"],
+        "reveal": {
+            "response": "桌子上有一本书",
+            "correct": False,
+            "match_kind": "incorrect",
+            "match_feedback": "",
+            "diff": {
+                "response": [{"text": "桌子上有一本书", "changed": True}],
+                "expected": [{"text": "桌上有一本书", "changed": True}],
+            },
+            "vocabulary_supplied": [],
+            "unresolved_placeholders": [],
+            "attempt_id": cursor.lastrowid,
+            "ready_to_learn": False,
+            "manual_override": False,
+            "ai_review_status": "",
+        },
+    }
+    db.execute(
+        "INSERT INTO grammar_session(id,plan_json) VALUES(1,?)",
+        (json.dumps(session_plan, ensure_ascii=False),),
+    )
+    db.commit()
     monkeypatch.setattr(web_module, "ai_review_configured", lambda: True)
     monkeypatch.setattr(
         web_module, "review_grammar_attempt", lambda attempt, point: result
@@ -862,6 +922,14 @@ def test_realtime_ai_review_repairs_score_and_tracks_cost(client, db, monkeypatc
     assert "DeepSeek is connected" in client.get("/settings").text
     progress = client.get("/progress")
     assert "桌子上 and 桌上 are both natural" in progress.text
+    review_page = client.get("/grammar-session/current")
+    assert review_page.text.count(
+        "桌子上 and 桌上 are both natural here."
+    ) == 1
+    assert "Your answer" in review_page.text
+    assert "Model answer" in review_page.text
+    assert "桌子上 is a slightly fuller location phrase." in review_page.text
+    assert "Alternative natural answer" not in review_page.text
     exported = client.get("/export/progress").json()
     assert exported["schema"] == 5
     assert exported["ai_usage"][0]["input_tokens"] == 600

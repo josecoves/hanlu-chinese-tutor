@@ -124,7 +124,7 @@ def _seed_stories(conn) -> None:
             {"zh": "我的学校离家不远。", "en": "My school is not far from home."},
             {"zh": "今天我坐地铁去学校。", "en": "Today I take the metro to school."},
             {"zh": "地铁站在路的左边。", "en": "The metro station is on the left side of the road."},
-            {"zh": "车上有很多人。", "en": "There are many people on the train."},
+            {"zh": "地铁里有很多人。", "en": "There are many people on the metro."},
             {"zh": "我听音乐，也看课本。", "en": "I listen to music and also read my textbook."},
             {"zh": "二十分钟以后，我到了。", "en": "Twenty minutes later, I arrive."},
             {"zh": "老师和同学都在教室里。", "en": "The teacher and classmates are all in the classroom."},
@@ -323,6 +323,30 @@ def _apply_content_corrections(conn) -> None:
         )
 
 
+def _apply_story_corrections(conn) -> None:
+    row = conn.execute(
+        "SELECT id,sentences_json FROM story WHERE title_zh='坐地铁去学校'"
+    ).fetchone()
+    if not row:
+        return
+    sentences = json.loads(row["sentences_json"])
+    changed = False
+    for sentence in sentences:
+        if sentence["zh"] == "车上有很多人。":
+            sentence.update({
+                "zh": "地铁里有很多人。",
+                "en": "There are many people on the metro.",
+                "py": sentence_pinyin("地铁里有很多人。"),
+                "audio": None,
+            })
+            changed = True
+    if changed:
+        conn.execute(
+            "UPDATE story SET sentences_json=? WHERE id=?",
+            (json.dumps(sentences, ensure_ascii=False), row["id"]),
+        )
+
+
 def bootstrap_content(conn) -> None:
     definitions = _definitions_by_word(config.HSK_PATH)
     if conn.execute("SELECT COUNT(*) FROM item").fetchone()[0]:
@@ -330,6 +354,7 @@ def bootstrap_content(conn) -> None:
         _seed_context_sentences(conn)
         _apply_content_corrections(conn)
         _seed_stories(conn)
+        _apply_story_corrections(conn)
         conn.commit()
         return
     labels = json.loads(config.TOPIC_LABELS_PATH.read_text())
@@ -362,6 +387,7 @@ def bootstrap_content(conn) -> None:
     _seed_context_sentences(conn)
     _apply_content_corrections(conn)
     _seed_stories(conn)
+    _apply_story_corrections(conn)
     _refresh_dictionary_metadata(conn, definitions)
     conn.commit()
 

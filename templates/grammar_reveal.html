@@ -10,7 +10,7 @@
     {% if match_kind != 'exact' %}<section id="answer-comparison" class="answer-comparison {{ 'accepted' if correct else 'needs-review' }}">
       <div><span>Your answer</span><p>{% for chunk in diff.response %}<mark class="{{ 'changed' if chunk.changed else '' }}">{{ chunk.text }}</mark>{% endfor %}</p></div>
       <div><span>Model answer</span><p>{% for chunk in diff.expected %}<mark class="{{ 'changed' if chunk.changed else '' }}">{{ chunk.text }}</mark>{% endfor %}</p></div>
-      {% if match_feedback %}<aside>{{ match_feedback }}</aside>{% endif %}
+      {% if match_feedback and show_match_feedback|default(true) %}<aside>{{ match_feedback }}</aside>{% endif %}
       {% if not correct or manual_override|default(false) or ai_review_status|default('') == 'pending' %}<div class="grading-actions">
         {% if manual_override|default(false) %}<button type="button" data-undo-attempt data-url="/grammar/attempt/{{ attempt_id }}/undo-accept">Undo my “correct” mark</button>{% elif not correct %}<button type="button" data-accept-attempt data-url="/grammar/attempt/{{ attempt_id }}/accept">Mark correct myself</button>{% endif %}
         {% if ai_review_status|default('') == 'pending' %}<button type="button" class="secondary" data-cancel-ai-review data-url="/grammar/attempt/{{ attempt_id }}/cancel-review">AI review pending ✓ · remove</button>{% else %}<button type="button" class="secondary" data-request-ai-review data-url="/grammar/attempt/{{ attempt_id }}/request-review" title="{{ 'Gets a live DeepSeek explanation' if ai_configured else 'Saves this answer for a later review' }}">{{ 'Explain / verify with AI' if ai_configured else 'Ask AI to check' }}</button>{% endif %}
@@ -20,7 +20,7 @@
     {% if ai_review %}<section class="ai-review-result {{ ai_review.decision }}">
       <div><span>AI SECOND OPINION{% if ai_review.provider %} · {{ ai_review.provider|upper }}{% endif %}</span><b>{{ ai_review.decision|replace('_', ' ') }} · {{ (ai_review.confidence * 100)|round|int }}% confidence</b></div>
       <p>{{ ai_review.explanation }}</p>
-      {% if ai_review.suggested_answer %}<aside><small>Natural answer</small><strong>{{ ai_review.suggested_answer }}</strong></aside>{% endif %}
+      {% if ai_review.show_suggested_answer %}<aside><small>Alternative natural answer</small><strong>{{ ai_review.suggested_answer }}</strong></aside>{% endif %}
       {% if ai_review.differences %}<ul>{% for difference in ai_review.differences %}<li>{{ difference }}</li>{% endfor %}</ul>{% endif %}
       {% if ai_review.curriculum_issue %}<em>Curriculum issue automatically flagged for maintenance.</em>{% endif %}
     </section>{% endif %}

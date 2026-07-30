@@ -1462,7 +1462,7 @@ def _hydrate_reveal_state(conn, reveal: dict) -> dict:
     if not attempt_id:
         return result
     attempt = conn.execute(
-        "SELECT correct,overridden,match_kind FROM grammar_attempt "
+        "SELECT correct,overridden,match_kind,expected FROM grammar_attempt "
         "WHERE id=? AND user_id=1", (attempt_id,),
     ).fetchone()
     if attempt:
@@ -1477,15 +1477,59 @@ def _hydrate_reveal_state(conn, reveal: dict) -> dict:
     ).fetchone()
     result["ai_review_status"] = review["status"] if review else ""
     if review and review["status"] == "resolved":
-        result["ai_review"] = {
+        explanation = review["explanation"] or ""
+        differences = []
+        for difference in json.loads(review["differences_json"] or "[]"):
+            if (
+                difference
+                and not _ai_text_overlaps(difference, explanation)
+                and not any(
+                    _ai_text_overlaps(difference, existing)
+                    for existing in differences
+                )
+            ):
+                differences.append(difference)
+        review_result = {
             **dict(review),
             "target_grammar_correct": bool(review["target_grammar_correct"]),
             "curriculum_issue": bool(review["curriculum_issue"]),
-            "differences": json.loads(review["differences_json"] or "[]"),
+            "differences": differences,
+            "show_suggested_answer": bool(
+                review["suggested_answer"]
+                and attempt
+                and _normalize_answer(review["suggested_answer"])
+                != _normalize_answer(attempt["expected"])
+            ),
         }
+        result["ai_review"] = review_result
+        result["show_match_feedback"] = bool(
+            result.get("match_feedback")
+            and not _ai_text_overlaps(
+                result["match_feedback"], review_result["explanation"]
+            )
+        )
     else:
         result["ai_review"] = None
+        result["show_match_feedback"] = bool(result.get("match_feedback"))
     return result
+
+
+def _ai_text_key(value: str) -> str:
+    return re.sub(r"[^\w\u3400-\u9fff]+", " ", str(value or "").lower()).strip()
+
+
+def _ai_text_overlaps(first: str, second: str) -> bool:
+    first_key = _ai_text_key(first)
+    second_key = _ai_text_key(second)
+    return bool(
+        first_key
+        and second_key
+        and (
+            first_key == second_key
+            or first_key in second_key
+            or second_key in first_key
+        )
+    )
 
 
 @app.post("/grammar/attempt/{attempt_id}/accept")
@@ -1659,8 +1703,7 @@ def request_grammar_ai_review(attempt_id: int, conn=Depends(get_conn)):
     _update_current_reveal(
         conn, attempt_id, correct=effective_correct,
         manual_override=effective_override, match_kind=effective_kind,
-        match_feedback=result.explanation, ai_review_status="resolved",
-        ai_review_error="",
+        ai_review_status="resolved", ai_review_error="",
     )
     conn.commit()
     return {
