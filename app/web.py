@@ -92,9 +92,11 @@ def _vocab_rows(conn, where="", params=(), limit=300, *, hsk=0,
         "SELECT i.*, "
         "MAX(CASE WHEN ms.facet='listening' THEN ms.card_json END) listen_card,"
         "MAX(CASE WHEN ms.facet='reading-recognition' THEN ms.card_json END) read_card,"
-        "COUNT(DISTINCT rl.id) practices, MAX(rl.ts) last_ts "
+        "COUNT(DISTINCT rl.id) practices, MAX(rl.ts) last_ts,"
+        "MAX(iko.status) knowledge_override "
         "FROM item i LEFT JOIN memory_state ms ON ms.item_id=i.id AND ms.user_id=1 "
         "LEFT JOIN review_log rl ON rl.item_id=i.id AND rl.user_id=1 "
+        "LEFT JOIN item_knowledge_override iko ON iko.item_id=i.id AND iko.user_id=1 "
         + where + " GROUP BY i.id",
         params,
     ).fetchall()
@@ -149,10 +151,19 @@ def _known_headwords(conn) -> set[str]:
     known = {
         headword for headword, grade in latest_reviews.items() if grade > 1
     }
+    needs_practice = {
+        row["headword"] for row in conn.execute(
+            "SELECT i.headword FROM item_knowledge_override iko "
+            "JOIN item i ON i.id=iko.item_id "
+            "WHERE iko.user_id=1 AND iko.status='needs_practice'"
+        )
+    }
+    known.difference_update(needs_practice)
     for row in conn.execute("SELECT headword,hsk_bands FROM item WHERE kind='word'"):
         levels = [int(value) for value in row["hsk_bands"].split(",") if value.isdigit()]
         if (
             row["headword"] not in latest_reviews
+            and row["headword"] not in needs_practice
             and levels and min(levels) <= learner_band
         ):
             known.add(row["headword"])
@@ -294,6 +305,11 @@ def answer(request: Request, idx: int = Form(...), response: str = Form(""),
         (item_id, facet, facet, rating, latency, hints_used, None,
          datetime.now(timezone.utc).isoformat()),
     )
+    if correct:
+        conn.execute(
+            "DELETE FROM item_knowledge_override WHERE user_id=1 AND item_id=?",
+            (item_id,),
+        )
     if facet == "reading-recognition" and previous is None:
         sibling = scheduler.new_state(datetime.now(timezone.utc) + timedelta(days=1))
         conn.execute(
@@ -347,6 +363,57 @@ def snooze_item(item_id: int, days: int = Form(7), conn=Depends(get_conn)):
         _save_plan(conn, plan)
     conn.commit()
     return RedirectResponse("/session/next?snoozed=1", 303)
+
+
+@app.post("/item/{item_id}/knowledge")
+def set_item_knowledge(item_id: int, state: str = Form("needs_practice"),
+                       return_to: str = Form("/vocab"), conn=Depends(get_conn)):
+    if not conn.execute("SELECT 1 FROM item WHERE id=?", (item_id,)).fetchone():
+        return Response("Word not found", 404)
+    if state == "needs_practice":
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+        conn.execute(
+            "INSERT INTO item_knowledge_override(user_id,item_id,status,updated_ts) "
+            "VALUES(1,?,'needs_practice',?) ON CONFLICT(user_id,item_id) DO UPDATE "
+            "SET status=excluded.status,updated_ts=excluded.updated_ts",
+            (item_id, now_iso),
+        )
+        for facet in config.FACETS:
+            previous = conn.execute(
+                "SELECT * FROM memory_state WHERE user_id=1 AND item_id=? AND facet=?",
+                (item_id, facet),
+            ).fetchone()
+            card = (
+                json.loads(previous["card_json"])
+                if previous else scheduler.new_state(now)
+            )
+            card["due"] = now_iso
+            conn.execute(
+                "INSERT INTO memory_state(user_id,item_id,facet,difficulty,stability,"
+                "last_review_ts,due_ts,lapses,suspended,card_json,seeded) "
+                "VALUES(1,?,?,?,?,?,?,?,?,?,0) ON CONFLICT(user_id,item_id,facet) "
+                "DO UPDATE SET due_ts=excluded.due_ts,suspended=0,"
+                "card_json=excluded.card_json,seeded=0",
+                (
+                    item_id, facet,
+                    previous["difficulty"] if previous else card.get("difficulty"),
+                    previous["stability"] if previous else card.get("stability"),
+                    previous["last_review_ts"] if previous else None,
+                    now_iso, previous["lapses"] if previous else 0, 0,
+                    json.dumps(card),
+                ),
+            )
+    elif state == "auto":
+        conn.execute(
+            "DELETE FROM item_knowledge_override WHERE user_id=1 AND item_id=?",
+            (item_id,),
+        )
+    else:
+        return Response("Invalid knowledge state", 400)
+    conn.commit()
+    safe_return = return_to if return_to.startswith("/") and not return_to.startswith("//") else "/vocab"
+    return RedirectResponse(safe_return, 303)
 
 
 @app.get("/vocab", response_class=HTMLResponse)
@@ -1154,10 +1221,15 @@ def _progress_payload(conn):
         "FROM story_word_exposure swe JOIN story s ON s.id=swe.story_id "
         "JOIN item i ON i.id=swe.item_id WHERE swe.user_id=1"
     ).fetchall()
+    knowledge_overrides = conn.execute(
+        "SELECT i.headword,iko.status,iko.updated_ts FROM item_knowledge_override iko "
+        "JOIN item i ON i.id=iko.item_id WHERE iko.user_id=1"
+    ).fetchall()
     band = conn.execute("SELECT declared_hsk_band FROM learner WHERE id=1").fetchone()[0]
-    return {"schema": 2, "declared_hsk_band": band,
+    return {"schema": 3, "declared_hsk_band": band,
             "memory_state": [dict(r) for r in memory],
             "review_log": [dict(r) for r in reviews],
+            "item_knowledge_override": [dict(r) for r in knowledge_overrides],
             "story_state": [dict(r) for r in story_states],
             "story_sentence_progress": [dict(r) for r in story_sentences],
             "story_word_exposure": [dict(r) for r in story_words]}

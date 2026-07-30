@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS item_preference (
   user_id INTEGER NOT NULL, item_id INTEGER NOT NULL, snoozed_until TEXT,
   PRIMARY KEY(user_id,item_id), FOREIGN KEY(item_id) REFERENCES item(id)
 );
+CREATE TABLE IF NOT EXISTS item_knowledge_override (
+  user_id INTEGER NOT NULL, item_id INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('needs_practice')),
+  updated_ts TEXT NOT NULL,
+  PRIMARY KEY(user_id,item_id), FOREIGN KEY(item_id) REFERENCES item(id)
+);
 CREATE TABLE IF NOT EXISTS bug_report (
   id INTEGER PRIMARY KEY, ref TEXT NOT NULL DEFAULT '', note TEXT NOT NULL, ts TEXT NOT NULL,
   resolved INTEGER NOT NULL DEFAULT 0, resolved_ts TEXT, context TEXT NOT NULL DEFAULT ''

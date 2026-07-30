@@ -11,10 +11,10 @@
     <label><span>Sort by</span><select name="sort"><option value="hsk">HSK level</option><option value="hanzi" {{ 'selected' if sort == 'hanzi' else '' }}>Hanzi</option><option value="practiced" {{ 'selected' if sort == 'practiced' else '' }}>Most practiced</option><option value="last" {{ 'selected' if sort == 'last' else '' }}>Recently practiced</option></select></label>
     <button>Apply</button><a href="{{ clear_url }}">Clear</a>
   </form>
-  <div class="table-wrap"><table class="vocab-table"><thead><tr><th>Hanzi</th><th>Pinyin</th><th>Meaning</th><th>HSK</th><th>Measure</th><th>Listening</th><th>Reading</th><th>Practiced</th><th>Last</th></tr></thead>
+  <div class="table-wrap"><table class="vocab-table compact-vocab"><thead><tr><th>Hanzi</th><th>Pinyin</th><th>Meaning</th><th>HSK</th><th>Measure</th><th>Memory</th><th>Activity</th><th>Knowledge</th></tr></thead>
   <tbody>{% for row in rows %}<tr><td class="hanzi"><a href="{{ row.dictionary_url }}" target="_blank" rel="noopener noreferrer" title="Look up {{ row.headword }} in MDBG">{{ row.headword }} ↗</a></td><td>{{ row.pinyin }}</td><td>{{ row.gloss }}</td><td><span class="hsk-badge hsk-{{ row.primary_hsk }}">HSK {{ row.hsk_bands|replace(',', ' · ') }}</span></td><td>{{ row.measure_word or '—' }}</td>
-    <td>{% if row.listening_score is not none %}<span class="score">{{ row.listening_score }}%</span>{% else %}—{% endif %}</td>
-    <td>{% if row.reading_score is not none %}<span class="score">{{ row.reading_score }}%</span>{% else %}—{% endif %}</td>
-    <td>{{ row.practices }}×{% if row.practices == 0 and (row.listen_card or row.read_card) %} <small>(assumed)</small>{% endif %}</td><td>{{ row.last }}</td></tr>{% else %}<tr><td colspan="9">No words found.</td></tr>{% endfor %}</tbody></table></div>
+    <td><div class="memory-scores"><span><small>L</small>{% if row.listening_score is not none %}<b>{{ row.listening_score }}%</b>{% else %}—{% endif %}</span><span><small>R</small>{% if row.reading_score is not none %}<b>{{ row.reading_score }}%</b>{% else %}—{% endif %}</span></div></td>
+    <td><div class="activity-cell"><b>{{ row.practices }}×</b><small>{{ row.last }}</small></div></td>
+    <td><form class="knowledge-control" method="post" action="/item/{{ row.id }}/knowledge"><input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">{% if row.knowledge_override == 'needs_practice' %}<input type="hidden" name="state" value="auto"><button class="active" title="Remove the manual needs-practice flag">Needs practice ✓</button>{% else %}<input type="hidden" name="state" value="needs_practice"><button title="Remove this word from known progress and add it to review">Needs practice</button>{% endif %}</form></td></tr>{% else %}<tr><td colspan="8">No words found.</td></tr>{% endfor %}</tbody></table></div>
 </section>
 {% endblock %}

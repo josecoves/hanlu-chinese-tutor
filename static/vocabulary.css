@@ -126,6 +126,50 @@
   color: white;
   cursor: pointer;
 }
+.compact-vocab { font-size: 13px; }
+.compact-vocab th,
+.compact-vocab td { padding: 10px 8px; }
+.compact-vocab th { font-size: 9px; }
+.compact-vocab .hanzi { font-size: 25px; white-space: nowrap; }
+.memory-scores {
+  display: flex;
+  gap: 5px;
+  white-space: nowrap;
+}
+.memory-scores span {
+  align-items: center;
+  background: #eee9df;
+  display: inline-flex;
+  gap: 4px;
+  padding: 5px 6px;
+}
+.memory-scores small {
+  color: var(--coral);
+  font-size: 8px;
+  font-weight: 800;
+}
+.memory-scores b { font-size: 11px; }
+.activity-cell { display: grid; gap: 2px; white-space: nowrap; }
+.activity-cell b { font-size: 12px; }
+.activity-cell small { font-size: 9px; }
+.knowledge-control button {
+  background: white;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 7px 8px;
+  white-space: nowrap;
+}
+.knowledge-control button:hover {
+  border-color: var(--coral);
+  color: var(--coral);
+}
+.knowledge-control button.active {
+  background: #f7d8cf;
+  border-color: var(--coral);
+  color: #8d3223;
+}
 
 @media (max-width: 600px) {
   .word-example { grid-template-columns: 1fr; }

@@ -1,5 +1,5 @@
 import json
-from app.web import _grammar_match
+from app.web import _grammar_match, _known_headwords
 
 
 def test_home_and_vocab(client):
@@ -165,7 +165,7 @@ def test_story_status_and_sentence_vocabulary_update_progress(client, db):
         "AND exercise_type='story-context'", (tea_id,)
     ).fetchone()[0] == 2
     exported = client.get("/export/progress").json()
-    assert exported["schema"] == 2
+    assert exported["schema"] == 3
     assert any(
         row["title_zh"] == "喝茶" and row["headword"] == "茶"
         for row in exported["story_word_exposure"]
@@ -216,6 +216,45 @@ def test_word_can_be_snoozed_and_leaves_current_session(client, db):
         "SELECT plan_json FROM session WHERE id=1"
     ).fetchone()[0])
     assert plan["idx"] == 1
+
+
+def test_word_can_be_marked_needs_practice_from_vocabulary(client, db):
+    item_id = db.execute("SELECT id FROM item WHERE headword='茶'").fetchone()[0]
+    db.execute("UPDATE learner SET declared_hsk_band=1 WHERE id=1")
+    db.commit()
+    assert "茶" in _known_headwords(db)
+
+    response = client.post(
+        f"/item/{item_id}/knowledge",
+        data={"state": "needs_practice", "return_to": "/vocab?hsk=1"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/vocab?hsk=1"
+    assert "茶" not in _known_headwords(db)
+    assert db.execute(
+        "SELECT status FROM item_knowledge_override WHERE item_id=?", (item_id,)
+    ).fetchone()[0] == "needs_practice"
+    assert db.execute(
+        "SELECT COUNT(*) FROM memory_state WHERE item_id=?",
+        (item_id,),
+    ).fetchone()[0] == 2
+
+    page = client.get("/vocab?hsk=1")
+    assert "Memory" in page.text
+    assert "Activity" in page.text
+    assert "Needs practice ✓" in page.text
+    exported = client.get("/export/progress").json()
+    assert any(
+        row["headword"] == "茶" and row["status"] == "needs_practice"
+        for row in exported["item_knowledge_override"]
+    )
+
+    client.post(
+        f"/item/{item_id}/knowledge",
+        data={"state": "auto", "return_to": "/vocab"},
+    )
+    assert "茶" in _known_headwords(db)
 
 
 def test_bug_ignores_blank_note(client, db):

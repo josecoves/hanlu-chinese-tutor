@@ -439,6 +439,17 @@ def restore_progress(conn, path: Path | None = None) -> dict:
                     row["status"], row["updated_ts"],
                 ),
             )
+    for row in data.get("item_knowledge_override", []):
+        item = conn.execute(
+            "SELECT id FROM item WHERE headword=?", (row["headword"],)
+        ).fetchone()
+        if item and row.get("status") == "needs_practice":
+            conn.execute(
+                "INSERT INTO item_knowledge_override(user_id,item_id,status,updated_ts) "
+                "VALUES(1,?,'needs_practice',?) ON CONFLICT(user_id,item_id) DO UPDATE "
+                "SET status=excluded.status,updated_ts=excluded.updated_ts",
+                (item["id"], row["updated_ts"]),
+            )
     conn.execute(
         "UPDATE learner SET declared_hsk_band=? WHERE id=1",
         (int(data.get("declared_hsk_band", 0)),),

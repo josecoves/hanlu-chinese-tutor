@@ -84,6 +84,12 @@ practiced, or most recently practiced is also available. “Practice this
 filtered set” creates a session from only the matching vocabulary, preserving
 the active topic, HSK, practice-status, and search filters.
 
+Vocabulary and topic tables include a one-click **Needs practice** control.
+Flagging a word immediately removes it from known-progress totals and makes
+both reading and listening memory due for review. The table combines those two
+memory scores into one column and combines practice count with last activity
+for a larger, more compact layout.
+
 ## Story learning
 
 The library contains twelve original HSK 1–2 stories with New, Reading, and
