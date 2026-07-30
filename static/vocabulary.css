@@ -126,6 +126,29 @@
   color: white;
   cursor: pointer;
 }
+.vocab-legend {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 10px;
+  gap: 8px 22px;
+  margin: -5px 2px 12px;
+}
+.vocab-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+.vocab-legend b { color: var(--ink); }
+.vocab-legend i {
+  background: #eee9df;
+  color: var(--coral);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  padding: 3px 4px;
+}
 .compact-vocab { font-size: 13px; }
 .compact-vocab th,
 .compact-vocab td { padding: 10px 8px; }
@@ -149,30 +172,39 @@
   font-weight: 800;
 }
 .memory-scores b { font-size: 11px; }
-.activity-cell { display: grid; gap: 2px; white-space: nowrap; }
-.activity-cell b { font-size: 12px; }
-.activity-cell small { font-size: 9px; }
-.knowledge-control button {
+.activity-cell {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+.activity-metrics { display: grid; gap: 2px; min-width: 30px; }
+.activity-metrics b { font-size: 12px; }
+.activity-metrics small { font-size: 9px; }
+.review-toggle {
   background: white;
   border: 1px solid var(--line);
   cursor: pointer;
   font-size: 9px;
   font-weight: 800;
-  padding: 7px 8px;
-  white-space: nowrap;
+  height: 28px;
+  padding: 0;
+  width: 28px;
 }
-.knowledge-control button:hover {
+.review-toggle:hover {
   border-color: var(--coral);
   color: var(--coral);
 }
-.knowledge-control button.active {
+.review-toggle.active {
   background: #f7d8cf;
   border-color: var(--coral);
   color: #8d3223;
 }
+.review-toggle:disabled { cursor: wait; opacity: .65; }
 
 @media (max-width: 600px) {
   .word-example { grid-template-columns: 1fr; }
   .word-example em { grid-column: 1; }
   .vocab-filters { grid-template-columns: 1fr; }
+  .vocab-legend { align-items: flex-start; flex-direction: column; }
 }

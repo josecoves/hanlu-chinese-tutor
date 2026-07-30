@@ -31,8 +31,8 @@
     </form>
     {% if plan.direction == 'comprehension' %}<p class="shortcut-legend"><kbd>1–4</kbd> answer · <kbd>0</kbd> don’t know</p>{% endif %}
   </article>
-  {% set ref = plan.ref %}{% set report_context = plan.zh ~ ' — ' ~ plan.en ~ ' · ' ~ point.title_en %}{% set report_return_to = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}{% include "_report.html" %}
+  {% set ref = plan.ref %}{% set report_context = plan.zh ~ ' — ' ~ plan.en ~ ' · ' ~ point.title_en %}{% set report_return_to = '/grammar-session/current' %}{% include "_report.html" %}
 </section>
-<script src="/static/practice.js"></script>
+<script src="/static/practice.js?v=3"></script>
 <script src="/static/grammar.js"></script>
 {% endblock %}

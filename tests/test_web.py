@@ -248,7 +248,13 @@ def test_word_can_be_marked_needs_practice_from_vocabulary(client, db):
     page = client.get("/vocab?hsk=1")
     assert "Memory" in page.text
     assert "Activity" in page.text
-    assert "Needs practice ✓" in page.text
+    assert "Knowledge" not in page.text
+    assert "add to review" in page.text
+    assert "R✓" in page.text
+    assert 'data-review-toggle' in page.text
+    assert "/static/vocabulary.js?v=2" in page.text
+    script = client.get("/static/vocabulary.js").text
+    assert 'headers: {"X-Requested-With": "hanlu"}' in script
     exported = client.get("/export/progress").json()
     assert any(
         row["headword"] == "茶" and row["status"] == "needs_practice"
@@ -260,6 +266,13 @@ def test_word_can_be_marked_needs_practice_from_vocabulary(client, db):
         data={"state": "auto", "return_to": "/vocab"},
     )
     assert "茶" in _known_headwords(db)
+
+    ajax = client.post(
+        f"/item/{item_id}/knowledge",
+        data={"state": "needs_practice", "return_to": "/vocab"},
+        headers={"X-Requested-With": "hanlu"},
+    )
+    assert ajax.json() == {"ok": True, "state": "needs_practice"}
 
 
 def test_bug_ignores_blank_note(client, db):
@@ -298,6 +311,40 @@ def test_bug_report_saves_in_place_without_losing_grammar_card(client, db):
     script = client.get("/static/practice.js").text
     assert "Report saved — continue this card." in script
     assert 'event.preventDefault()' in script
+
+
+def test_bug_report_non_js_fallback_resumes_exact_grammar_reveal(client, db):
+    point = db.execute(
+        "SELECT id FROM grammar_point WHERE title_zh='有字句'"
+    ).fetchone()
+    client.get(
+        f"/grammar/practice/card?grammar_id={point['id']}&mode=production"
+    )
+    plan = json.loads(db.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()[0])
+    reveal = client.post("/grammar/answer", data={"response": "完全不对"})
+    assert "Keep building" in reveal.text
+    assert 'value="/grammar-session/current"' in reveal.text
+    assert "/static/practice.js?v=3" in reveal.text
+    attempts_before = db.execute(
+        "SELECT COUNT(*) FROM grammar_attempt"
+    ).fetchone()[0]
+
+    saved = client.post("/bug", data={
+        "ref": plan["ref"],
+        "note": "Resume this exact reveal.",
+        "context": f"{plan['zh']} — {plan['en']}",
+        "return_to": "/grammar-session/current",
+    }, follow_redirects=False)
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/grammar-session/current"
+    resumed = client.get(saved.headers["location"])
+    assert "Keep building" in resumed.text
+    assert plan["zh"] in resumed.text
+    assert db.execute(
+        "SELECT COUNT(*) FROM grammar_attempt"
+    ).fetchone()[0] == attempts_before
 
 
 def test_grammar_reference_and_comprehension_practice(client, db):
@@ -424,6 +471,12 @@ def test_natural_chinese_variant_is_accepted():
     assert _grammar_match(
         "桌上没有一本书", "桌上有一本书。", "production"
     )[0] == "incorrect"
+    kind, note = _grammar_match(
+        "他有一个妹妹", "她有一个妹妹。", "production"
+    )
+    assert kind == "accepted_variant"
+    assert "tested grammar is correct" in note
+    assert "uses 她" in note
 
 
 def test_grammar_production_accepts_english_vocabulary_placeholder(client, db):

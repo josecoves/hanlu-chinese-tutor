@@ -1082,6 +1082,7 @@ def grammar_practice(request: Request, level: int = 0, grammar_id: int = 0,
         "en": example["en"], "pinyin": sentence_pinyin(example["zh"]), "mode": mode,
         "ref": f"#G{point['id']}-{hashlib.sha1(example['zh'].encode()).hexdigest()[:6]}",
         "scope": scope, "focus_id": grammar_id, "requested_level": level,
+        "choices": choices,
     }
     conn.execute(
         "INSERT INTO grammar_session(id,plan_json) VALUES(1,?) "
@@ -1122,6 +1123,15 @@ def _grammar_match(response: str, expected: str, direction: str) -> tuple[str, s
         return "exact", ""
     if direction != "production":
         return "incorrect", ""
+    if actual.replace("她", "他").replace("它", "他") == (
+        target.replace("她", "他").replace("它", "他")
+    ):
+        return (
+            "accepted_variant",
+            "Your tested grammar is correct. 他, 她, and 它 are all pronounced tā, "
+            "but the written character should match he, she, or it; this prompt "
+            "uses 她 for “she.”",
+        )
     if _canonical_chinese(response) == _canonical_chinese(expected):
         if ("桌子" in response and "桌" in expected) or (
             "桌子" in expected and "桌" in response
@@ -1199,7 +1209,6 @@ def grammar_answer(request: Request, response: str = Form(""),
         (plan["grammar_id"], plan["direction"], plan["prompt"], response, int(correct),
          effective_hints, datetime.now(timezone.utc).isoformat(), 0, match_kind),
     )
-    conn.commit()
     point = conn.execute(
         "SELECT * FROM grammar_point WHERE id=?", (plan["grammar_id"],)
     ).fetchone()
@@ -1216,14 +1225,49 @@ def grammar_answer(request: Request, response: str = Form(""),
         state and state["status"] == "practicing" and stats["attempts"] >= 5
         and stats["correct"] / stats["attempts"] >= 0.8
     )
+    reveal = {
+        "response": response or "I don’t know",
+        "correct": correct,
+        "match_kind": match_kind,
+        "match_feedback": match_feedback,
+        "diff": _answer_diff(resolved_response, plan["expected"]),
+        "vocabulary_supplied": vocabulary_supplied,
+        "unresolved_placeholders": unresolved_placeholders,
+        "attempt_id": cursor.lastrowid,
+        "ready_to_learn": bool(ready_to_learn),
+    }
+    plan["reveal"] = reveal
+    conn.execute(
+        "UPDATE grammar_session SET plan_json=? WHERE id=1",
+        (json.dumps(plan, ensure_ascii=False),),
+    )
+    conn.commit()
     return render(request, "grammar_reveal.html", point=dict(point), plan=plan,
-                  response=response or "I don’t know", correct=correct,
-                  examples=_grammar_examples(point), match_kind=match_kind,
-                  match_feedback=match_feedback,
-                  diff=_answer_diff(resolved_response, plan["expected"]),
-                  vocabulary_supplied=vocabulary_supplied,
-                  unresolved_placeholders=unresolved_placeholders,
-                  attempt_id=cursor.lastrowid, ready_to_learn=ready_to_learn)
+                  examples=_grammar_examples(point), **reveal)
+
+
+@app.get("/grammar-session/current", response_class=HTMLResponse)
+def grammar_current(request: Request, conn=Depends(get_conn)):
+    row = conn.execute("SELECT plan_json FROM grammar_session WHERE id=1").fetchone()
+    if not row:
+        return RedirectResponse("/grammar", 303)
+    plan = json.loads(row["plan_json"])
+    point = conn.execute(
+        "SELECT * FROM grammar_point WHERE id=?", (plan["grammar_id"],)
+    ).fetchone()
+    if not point:
+        return RedirectResponse("/grammar", 303)
+    reveal = plan.get("reveal")
+    if reveal:
+        return render(
+            request, "grammar_reveal.html", point=dict(point), plan=plan,
+            examples=_grammar_examples(point), **reveal,
+        )
+    return render(
+        request, "grammar_question.html", point=dict(point), plan=plan,
+        choices=plan.get("choices", []),
+        vocabulary=_grammar_vocabulary(conn, plan["zh"]),
+    )
 
 
 @app.post("/grammar/attempt/{attempt_id}/accept")
