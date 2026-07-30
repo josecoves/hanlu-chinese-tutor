@@ -89,9 +89,18 @@ CREATE TABLE IF NOT EXISTS grammar_point (
 CREATE TABLE IF NOT EXISTS grammar_attempt (
   id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, grammar_id INTEGER NOT NULL,
   direction TEXT NOT NULL, prompt TEXT NOT NULL, response TEXT NOT NULL,
+  expected TEXT NOT NULL DEFAULT '',
   correct INTEGER NOT NULL, hints_used INTEGER NOT NULL DEFAULT 0, ts TEXT NOT NULL,
   overridden INTEGER NOT NULL DEFAULT 0, match_kind TEXT NOT NULL DEFAULT 'exact',
   FOREIGN KEY(grammar_id) REFERENCES grammar_point(id)
+);
+CREATE TABLE IF NOT EXISTS grammar_review_request (
+  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, attempt_id INTEGER NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','resolved','cancelled')),
+  requested_ts TEXT NOT NULL, resolved_ts TEXT, decision TEXT NOT NULL DEFAULT '',
+  explanation TEXT NOT NULL DEFAULT '',
+  FOREIGN KEY(attempt_id) REFERENCES grammar_attempt(id)
 );
 CREATE TABLE IF NOT EXISTS grammar_state (
   user_id INTEGER NOT NULL, grammar_id INTEGER NOT NULL,
@@ -114,6 +123,7 @@ MIGRATIONS = {
     "grammar_attempt": {
         "overridden": "INTEGER NOT NULL DEFAULT 0",
         "match_kind": "TEXT NOT NULL DEFAULT 'exact'",
+        "expected": "TEXT NOT NULL DEFAULT ''",
     },
 }
 

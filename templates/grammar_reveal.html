@@ -6,12 +6,16 @@
   <div class="practice-top grammar-top"><div class="practice-exits">{% if plan.focus_id %}<a href="/grammar/{{ plan.focus_id }}">← Back to lesson</a><a href="/grammar">End to grammar index</a>{% else %}<a href="/grammar">← End practice</a>{% endif %}</div><span>HSK {{ point.level }} · {{ point.title_en }}</span></div>
   <article class="practice-card reveal grammar-card">
     <div class="card-meta"><span class="facet">{{ 'COMPREHENSION · 理解' if plan.direction == 'comprehension' else 'PRODUCTION · 表达' }}</span><span class="hsk-badge">HSK {{ point.level }}</span></div>
-    <div id="grammar-verdict" class="verdict {{ 'correct' if correct else 'wrong' }}">{% if match_kind == 'accepted_with_vocab_help' %}✓ Grammar correct · vocabulary supplied{% elif match_kind == 'accepted_variant' or match_kind == 'accepted_close' %}✓ Correct · natural variant{% elif correct %}✓ Correct{% else %}✕ Keep building{% endif %}</div>
+    <div id="grammar-verdict" class="verdict {{ 'correct' if correct else 'wrong' }}">{% if manual_override|default(false) %}✓ Marked correct by you{% elif match_kind == 'accepted_with_vocab_help' %}✓ Grammar correct · vocabulary supplied{% elif match_kind == 'accepted_variant' or match_kind == 'accepted_close' %}✓ Correct · natural variant{% elif correct %}✓ Correct{% else %}✕ Keep building{% endif %}</div>
     {% if match_kind != 'exact' %}<section id="answer-comparison" class="answer-comparison {{ 'accepted' if correct else 'needs-review' }}">
       <div><span>Your answer</span><p>{% for chunk in diff.response %}<mark class="{{ 'changed' if chunk.changed else '' }}">{{ chunk.text }}</mark>{% endfor %}</p></div>
       <div><span>Model answer</span><p>{% for chunk in diff.expected %}<mark class="{{ 'changed' if chunk.changed else '' }}">{{ chunk.text }}</mark>{% endfor %}</p></div>
       {% if match_feedback %}<aside>{{ match_feedback }}</aside>{% endif %}
-      {% if not correct %}<div class="grading-actions"><button type="button" data-accept-attempt data-url="/grammar/attempt/{{ attempt_id }}/accept">I believe this should be correct</button><button type="button" disabled title="Planned future feature">Ask AI to check · Future</button><span data-accept-state aria-live="polite"></span></div>{% endif %}
+      {% if not correct or manual_override|default(false) or ai_review_status|default('') == 'pending' %}<div class="grading-actions">
+        {% if manual_override|default(false) %}<button type="button" data-undo-attempt data-url="/grammar/attempt/{{ attempt_id }}/undo-accept">Undo my “correct” mark</button>{% elif not correct %}<button type="button" data-accept-attempt data-url="/grammar/attempt/{{ attempt_id }}/accept">Mark correct myself</button>{% endif %}
+        {% if ai_review_status|default('') == 'pending' %}<button type="button" class="secondary" data-cancel-ai-review data-url="/grammar/attempt/{{ attempt_id }}/cancel-review">AI review queued ✓ · remove</button>{% else %}<button type="button" class="secondary" data-request-ai-review data-url="/grammar/attempt/{{ attempt_id }}/request-review" title="Saves this answer for a later AI review">Ask AI to check</button>{% endif %}
+        <span data-grading-state aria-live="polite"></span>
+      </div>{% endif %}
     </section>{% endif %}
     {% if vocabulary_supplied %}<section class="vocabulary-supplied"><span>Vocabulary supplied for this grammar answer</span>{% for item in vocabulary_supplied %}<p><b>{{ item.english }}</b> → <strong>{{ item.headword }}</strong> <i>{{ item.pinyin }}</i> · {{ item.gloss }} · added to vocabulary practice</p>{% endfor %}</section>{% endif %}
     {% if unresolved_placeholders %}<p class="unresolved-vocabulary">I couldn’t safely match {{ unresolved_placeholders|join(', ') }} to this sentence. Open Sentence vocabulary on the next card or enter the Chinese word.</p>{% endif %}
@@ -23,5 +27,5 @@
   {% set ref = plan.ref %}{% set report_context = plan.zh ~ ' — ' ~ plan.en ~ ' · ' ~ point.title_en %}{% set report_return_to = '/grammar-session/current' %}{% include "_report.html" %}
 </section>
 <script src="/static/practice.js?v=3"></script>
-<script src="/static/grammar.js"></script>
+<script src="/static/grammar.js?v=4"></script>
 {% endblock %}

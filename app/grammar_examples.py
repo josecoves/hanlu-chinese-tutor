@@ -46,6 +46,29 @@ ANCHORS = {
 REQUIRE_ALL = {"因为所以", "从到结构", "转折复句", "虽然但是", "一边一边", "除了以外"}
 
 CURATED_EXAMPLE_SETS = {
+    "吗问句": {
+        "theory": [
+            ("你是老师吗？", "Are you a teacher?"),
+            ("她今天来吗？", "Is she coming today?"),
+            ("你好吗？", "Are you well?"),
+            ("他是学生吗？", "Is he a student?"),
+            ("你喝茶吗？", "Do you drink tea?"),
+        ],
+        "practice": [
+            ("你是学生吗？", "Are you a student?"),
+            ("他是医生吗？", "Is he a doctor?"),
+            ("她是中国人吗？", "Is she Chinese?"),
+            ("你吃米饭吗？", "Do you eat rice?"),
+            ("你喜欢咖啡吗？", "Do you like coffee?"),
+            ("她有妹妹吗？", "Does she have a younger sister?"),
+            ("今天很冷吗？", "Is it cold today?"),
+            ("这是你的书吗？", "Is this your book?"),
+            ("明天有课吗？", "Is there class tomorrow?"),
+            ("你们现在忙吗？", "Are you busy now?"),
+            ("你的妈妈好吗？", "Is your mother well?"),
+            ("你们国家的人吃米饭吗？", "Do people in your country eat rice?"),
+        ],
+    },
     "有字句": {
         "theory": [
             ("我有一个哥哥。", "I have an older brother."),

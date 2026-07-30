@@ -89,9 +89,18 @@
   });
   document.addEventListener("grammar-filter-change", applyFilters);
 
-  document.querySelector("[data-accept-attempt]")?.addEventListener("click", async event => {
-    const button = event.currentTarget;
-    const state = document.querySelector("[data-accept-state]");
+  document.addEventListener("click", async event => {
+    const button = event.target.closest(
+      "[data-accept-attempt],[data-undo-attempt],"
+      + "[data-request-ai-review],[data-cancel-ai-review]"
+    );
+    if (!button) return;
+    event.preventDefault();
+    const state = document.querySelector("[data-grading-state]");
+    const action = button.hasAttribute("data-accept-attempt") ? "accept"
+      : button.hasAttribute("data-undo-attempt") ? "undo"
+      : button.hasAttribute("data-request-ai-review") ? "request"
+      : "cancel";
     button.disabled = true;
     if (state) state.textContent = "Updating…";
     try {
@@ -99,18 +108,52 @@
         method: "POST",
         headers: {"X-Requested-With": "hanlu"}
       });
-      if (!response.ok) throw new Error("override failed");
+      if (!response.ok) throw new Error("grading action failed");
       const verdict = document.getElementById("grammar-verdict");
-      if (verdict) {
-        verdict.className = "verdict correct";
-        verdict.textContent = "✓ Marked correct by you";
+      const comparison = document.getElementById("answer-comparison");
+      if (action === "accept") {
+        if (verdict) {
+          verdict.className = "verdict correct";
+          verdict.textContent = "✓ Marked correct by you";
+        }
+        comparison?.classList.add("accepted");
+        button.removeAttribute("data-accept-attempt");
+        button.setAttribute("data-undo-attempt", "");
+        button.dataset.url = button.dataset.url.replace("/accept", "/undo-accept");
+        button.textContent = "Undo my “correct” mark";
+        if (state) state.textContent = "Saved · this is reversible";
+      } else if (action === "undo") {
+        if (verdict) {
+          verdict.className = "verdict wrong";
+          verdict.textContent = "✕ Keep building";
+        }
+        comparison?.classList.remove("accepted");
+        button.removeAttribute("data-undo-attempt");
+        button.setAttribute("data-accept-attempt", "");
+        button.dataset.url = button.dataset.url.replace("/undo-accept", "/accept");
+        button.textContent = "Mark correct myself";
+        if (state) state.textContent = "Your override was undone";
+      } else if (action === "request") {
+        button.removeAttribute("data-request-ai-review");
+        button.setAttribute("data-cancel-ai-review", "");
+        button.dataset.url = button.dataset.url.replace(
+          "/request-review", "/cancel-review"
+        );
+        button.textContent = "AI review queued ✓ · remove";
+        if (state) state.textContent = "Saved for a later AI check";
+      } else {
+        button.removeAttribute("data-cancel-ai-review");
+        button.setAttribute("data-request-ai-review", "");
+        button.dataset.url = button.dataset.url.replace(
+          "/cancel-review", "/request-review"
+        );
+        button.textContent = "Ask AI to check";
+        if (state) state.textContent = "Removed from AI review queue";
       }
-      document.getElementById("answer-comparison")?.classList.add("accepted");
-      if (state) state.textContent = "Saved as correct";
-      button.remove();
     } catch (_) {
-      button.disabled = false;
       if (state) state.textContent = "Couldn’t update — try again";
+    } finally {
+      button.disabled = false;
     }
   });
 

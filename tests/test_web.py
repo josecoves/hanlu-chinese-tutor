@@ -170,7 +170,7 @@ def test_story_status_and_sentence_vocabulary_update_progress(client, db):
         "AND exercise_type='story-context'", (tea_id,)
     ).fetchone()[0] == 2
     exported = client.get("/export/progress").json()
-    assert exported["schema"] == 3
+    assert exported["schema"] == 4
     assert any(
         row["title_zh"] == "喝茶" and row["headword"] == "茶"
         for row in exported["story_word_exposure"]
@@ -365,6 +365,19 @@ def test_grammar_reference_and_comprehension_practice(client, db):
     assert {row["zh"] for row in theory}.isdisjoint(
         {row["zh"] for row in practice}
     )
+    ma_sets = db.execute(
+        "SELECT theory_examples_json,practice_examples_json FROM grammar_point "
+        "WHERE title_zh='吗问句'"
+    ).fetchone()
+    ma_theory = json.loads(ma_sets["theory_examples_json"])
+    ma_practice = json.loads(ma_sets["practice_examples_json"])
+    assert len(ma_theory) >= 5
+    assert len(ma_practice) >= 10
+    assert all(row["zh"].endswith("吗？") for row in ma_practice)
+    assert not any(
+        marker in row["zh"] for row in ma_practice
+        for marker in ("的吗", "了吗", "在您国家的人是")
+    )
     card = client.get("/grammar/practice/card?level=1&mode=comprehension")
     assert card.status_code == 200
     assert 'data-choice-index="1"' in card.text
@@ -502,6 +515,16 @@ def test_natural_chinese_variant_is_accepted():
     assert kind == "accepted_variant"
     assert "tested grammar is correct" in note
     assert "uses 她" in note
+    kind, note = _grammar_match(
+        "你国家的人吃米饭吗", "你们国家的人吃米饭吗？", "production"
+    )
+    assert kind == "accepted_variant"
+    assert "more standard written form" in note
+    kind, note = _grammar_match(
+        "您喜欢喝茶吗？", "你喜欢喝茶吗？", "production"
+    )
+    assert kind == "accepted_variant"
+    assert "different level of formality" in note
 
 
 def test_grammar_production_accepts_english_vocabulary_placeholder(client, db):
@@ -568,3 +591,42 @@ def test_manual_grammar_override(client, db):
         (cursor.lastrowid,),
     ).fetchone()
     assert tuple(attempt) == (1, 1, "manual_override")
+
+    undone = client.post(
+        f"/grammar/attempt/{cursor.lastrowid}/undo-accept"
+    )
+    assert undone.json() == {
+        "ok": True, "correct": False, "manual_override": False
+    }
+    attempt = db.execute(
+        "SELECT correct,overridden,match_kind FROM grammar_attempt WHERE id=?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    assert tuple(attempt) == (0, 0, "incorrect")
+
+    queued = client.post(
+        f"/grammar/attempt/{cursor.lastrowid}/request-review"
+    )
+    assert queued.json() == {"ok": True, "status": "pending"}
+    assert db.execute(
+        "SELECT status FROM grammar_review_request WHERE attempt_id=?",
+        (cursor.lastrowid,),
+    ).fetchone()[0] == "pending"
+    progress = client.get("/progress")
+    assert "Answers saved for a second opinion" in progress.text
+    assert "test" in progress.text
+    exported = client.get("/export/progress").json()
+    assert exported["schema"] == 4
+    assert any(
+        row["attempt_id"] == cursor.lastrowid and row["status"] == "pending"
+        for row in exported["grammar_review_request"]
+    )
+    assert any(
+        row["id"] == cursor.lastrowid and row["response"] == "test"
+        for row in exported["grammar_attempt"]
+    )
+
+    cancelled = client.post(
+        f"/grammar/attempt/{cursor.lastrowid}/cancel-review"
+    )
+    assert cancelled.json() == {"ok": True, "status": "cancelled"}

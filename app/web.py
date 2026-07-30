@@ -1128,6 +1128,8 @@ BENIGN_CHINESE_VARIANTS = (
     ("那里", "那儿"),
     ("哪里", "哪儿"),
     ("星期", "周"),
+    ("你们国家", "你国家"),
+    ("您", "你"),
 )
 PROTECTED_GRAMMAR_MARKERS = ("不", "没", "别", "了", "过", "着", "把", "被", "比", "吗")
 
@@ -1163,6 +1165,19 @@ def _grammar_match(response: str, expected: str, direction: str) -> tuple[str, s
                 "accepted_variant",
                 "桌子 and 桌 both mean “table.” Before a position word such as 上, "
                 "桌子上 and 桌上 are both natural.",
+            )
+        if "你国家" in response and "你们国家" in expected:
+            return (
+                "accepted_variant",
+                "Your 吗 question is correct and 你国家 is understandable in "
+                "conversation. 你们国家 is the more standard written form for "
+                "“your country.”",
+            )
+        if ("您" in response) != ("您" in expected):
+            return (
+                "accepted_variant",
+                "Your answer uses a different level of formality: 您 is polite and "
+                "你 is neutral. Both preserve the tested grammar.",
             )
         return (
             "accepted_variant",
@@ -1228,9 +1243,11 @@ def grammar_answer(request: Request, response: str = Form(""),
     effective_hints = hints_used + len(vocabulary_supplied)
     cursor = conn.execute(
         "INSERT INTO grammar_attempt(user_id,grammar_id,direction,prompt,response,"
-        "correct,hints_used,ts,overridden,match_kind) VALUES(1,?,?,?,?,?,?,?,?,?)",
-        (plan["grammar_id"], plan["direction"], plan["prompt"], response, int(correct),
-         effective_hints, datetime.now(timezone.utc).isoformat(), 0, match_kind),
+        "expected,correct,hints_used,ts,overridden,match_kind) "
+        "VALUES(1,?,?,?,?,?,?,?,?,?,?)",
+        (plan["grammar_id"], plan["direction"], plan["prompt"], response,
+         plan["expected"], int(correct), effective_hints,
+         datetime.now(timezone.utc).isoformat(), 0, match_kind),
     )
     point = conn.execute(
         "SELECT * FROM grammar_point WHERE id=?", (plan["grammar_id"],)
@@ -1258,6 +1275,8 @@ def grammar_answer(request: Request, response: str = Form(""),
         "unresolved_placeholders": unresolved_placeholders,
         "attempt_id": cursor.lastrowid,
         "ready_to_learn": bool(ready_to_learn),
+        "manual_override": False,
+        "ai_review_status": "",
     }
     plan["reveal"] = reveal
     conn.execute(
@@ -1282,6 +1301,7 @@ def grammar_current(request: Request, conn=Depends(get_conn)):
         return RedirectResponse("/grammar", 303)
     reveal = plan.get("reveal")
     if reveal:
+        reveal = _hydrate_reveal_state(conn, reveal)
         return render(
             request, "grammar_reveal.html", point=dict(point), plan=plan,
             examples=_grammar_examples(point), **reveal,
@@ -1291,6 +1311,43 @@ def grammar_current(request: Request, conn=Depends(get_conn)):
         choices=plan.get("choices", []),
         vocabulary=_grammar_vocabulary(conn, plan["zh"]),
     )
+
+
+def _update_current_reveal(conn, attempt_id: int, **updates) -> None:
+    row = conn.execute("SELECT plan_json FROM grammar_session WHERE id=1").fetchone()
+    if not row:
+        return
+    plan = json.loads(row["plan_json"])
+    reveal = plan.get("reveal")
+    if not reveal or reveal.get("attempt_id") != attempt_id:
+        return
+    reveal.update(updates)
+    plan["reveal"] = reveal
+    conn.execute(
+        "UPDATE grammar_session SET plan_json=? WHERE id=1",
+        (json.dumps(plan, ensure_ascii=False),),
+    )
+
+
+def _hydrate_reveal_state(conn, reveal: dict) -> dict:
+    result = dict(reveal)
+    attempt_id = result.get("attempt_id")
+    if not attempt_id:
+        return result
+    attempt = conn.execute(
+        "SELECT correct,overridden,match_kind FROM grammar_attempt "
+        "WHERE id=? AND user_id=1", (attempt_id,),
+    ).fetchone()
+    if attempt:
+        result["correct"] = bool(attempt["correct"])
+        result["manual_override"] = bool(attempt["overridden"])
+        result["match_kind"] = attempt["match_kind"]
+    review = conn.execute(
+        "SELECT status FROM grammar_review_request "
+        "WHERE attempt_id=? AND user_id=1", (attempt_id,),
+    ).fetchone()
+    result["ai_review_status"] = review["status"] if review else ""
+    return result
 
 
 @app.post("/grammar/attempt/{attempt_id}/accept")
@@ -1305,8 +1362,68 @@ def accept_grammar_attempt(attempt_id: int, conn=Depends(get_conn)):
         "WHERE id=? AND user_id=1",
         (attempt_id,),
     )
+    _update_current_reveal(
+        conn, attempt_id, correct=True, manual_override=True,
+        match_kind="manual_override",
+        match_feedback="Marked correct by you. You can undo this decision or queue it "
+                       "for an AI review.",
+    )
     conn.commit()
-    return {"ok": True, "correct": True}
+    return {"ok": True, "correct": True, "manual_override": True}
+
+
+@app.post("/grammar/attempt/{attempt_id}/undo-accept")
+def undo_grammar_attempt_accept(attempt_id: int, conn=Depends(get_conn)):
+    attempt = conn.execute(
+        "SELECT id,overridden FROM grammar_attempt WHERE id=? AND user_id=1",
+        (attempt_id,),
+    ).fetchone()
+    if not attempt:
+        return Response("Grammar attempt not found", 404)
+    if not attempt["overridden"]:
+        return {"ok": True, "correct": False, "manual_override": False}
+    conn.execute(
+        "UPDATE grammar_attempt SET correct=0,overridden=0,match_kind='incorrect' "
+        "WHERE id=? AND user_id=1",
+        (attempt_id,),
+    )
+    _update_current_reveal(
+        conn, attempt_id, correct=False, manual_override=False,
+        match_kind="incorrect", match_feedback="",
+    )
+    conn.commit()
+    return {"ok": True, "correct": False, "manual_override": False}
+
+
+@app.post("/grammar/attempt/{attempt_id}/request-review")
+def request_grammar_ai_review(attempt_id: int, conn=Depends(get_conn)):
+    if not conn.execute(
+        "SELECT 1 FROM grammar_attempt WHERE id=? AND user_id=1", (attempt_id,)
+    ).fetchone():
+        return Response("Grammar attempt not found", 404)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO grammar_review_request(user_id,attempt_id,status,requested_ts) "
+        "VALUES(1,?,'pending',?) ON CONFLICT(attempt_id) DO UPDATE SET "
+        "status='pending',requested_ts=excluded.requested_ts,resolved_ts=NULL,"
+        "decision='',explanation=''",
+        (attempt_id, now_iso),
+    )
+    _update_current_reveal(conn, attempt_id, ai_review_status="pending")
+    conn.commit()
+    return {"ok": True, "status": "pending"}
+
+
+@app.post("/grammar/attempt/{attempt_id}/cancel-review")
+def cancel_grammar_ai_review(attempt_id: int, conn=Depends(get_conn)):
+    conn.execute(
+        "UPDATE grammar_review_request SET status='cancelled' "
+        "WHERE attempt_id=? AND user_id=1",
+        (attempt_id,),
+    )
+    _update_current_reveal(conn, attempt_id, ai_review_status="cancelled")
+    conn.commit()
+    return {"ok": True, "status": "cancelled"}
 
 
 @app.get("/progress", response_class=HTMLResponse)
@@ -1323,8 +1440,17 @@ def progress(request: Request, conn=Depends(get_conn)):
         "SELECT i.headword,i.pinyin,i.gloss,rl.facet,rl.grade,rl.ts FROM review_log rl "
         "JOIN item i ON i.id=rl.item_id ORDER BY rl.ts DESC LIMIT 40"
     ).fetchall()
+    grammar_reviews = conn.execute(
+        "SELECT grr.id,grr.status,grr.requested_ts,grr.decision,grr.explanation,"
+        "ga.id attempt_id,ga.prompt,ga.response,ga.expected,gp.title_en,gp.level "
+        "FROM grammar_review_request grr "
+        "JOIN grammar_attempt ga ON ga.id=grr.attempt_id "
+        "JOIN grammar_point gp ON gp.id=ga.grammar_id "
+        "WHERE grr.user_id=1 AND grr.status<>'cancelled' "
+        "ORDER BY grr.status='pending' DESC,grr.requested_ts DESC LIMIT 20"
+    ).fetchall()
     return render(request, "progress.html", totals=totals, misses=misses, recent=recent,
-                  relative=_relative)
+                  grammar_reviews=grammar_reviews, relative=_relative)
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -1402,11 +1528,24 @@ def _progress_payload(conn):
         "SELECT i.headword,iko.status,iko.updated_ts FROM item_knowledge_override iko "
         "JOIN item i ON i.id=iko.item_id WHERE iko.user_id=1"
     ).fetchall()
+    grammar_attempts = conn.execute(
+        "SELECT ga.id,gp.level,gp.title_en,ga.direction,ga.prompt,ga.response,"
+        "ga.expected,ga.correct,ga.hints_used,ga.ts,ga.overridden,ga.match_kind "
+        "FROM grammar_attempt ga JOIN grammar_point gp ON gp.id=ga.grammar_id "
+        "WHERE ga.user_id=1 ORDER BY ga.id"
+    ).fetchall()
+    grammar_reviews = conn.execute(
+        "SELECT grr.attempt_id,grr.status,grr.requested_ts,grr.resolved_ts,"
+        "grr.decision,grr.explanation FROM grammar_review_request grr "
+        "WHERE grr.user_id=1 ORDER BY grr.id"
+    ).fetchall()
     band = conn.execute("SELECT declared_hsk_band FROM learner WHERE id=1").fetchone()[0]
-    return {"schema": 3, "declared_hsk_band": band,
+    return {"schema": 4, "declared_hsk_band": band,
             "memory_state": [dict(r) for r in memory],
             "review_log": [dict(r) for r in reviews],
             "item_knowledge_override": [dict(r) for r in knowledge_overrides],
+            "grammar_attempt": [dict(r) for r in grammar_attempts],
+            "grammar_review_request": [dict(r) for r in grammar_reviews],
             "story_state": [dict(r) for r in story_states],
             "story_sentence_progress": [dict(r) for r in story_sentences],
             "story_word_exposure": [dict(r) for r in story_words]}
