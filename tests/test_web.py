@@ -114,6 +114,11 @@ def test_story_status_and_sentence_vocabulary_update_progress(client, db):
     page = client.get(f"/story/{story_id}")
     assert "Going next marks every word studied" in page.text
     assert "\\u8336" in page.text
+    assert "Flag a problem with this card" in page.text
+    assert "/static/reader.js?v=2" in page.text
+    reader_script = client.get("/static/reader.js").text
+    assert '{capture: true}' in reader_script
+    assert "event.preventDefault()" in reader_script
 
     saved = client.post(
         f"/story/{story_id}/status",
@@ -274,6 +279,27 @@ def test_bug_keeps_grammar_context(client, db):
     assert "我是学生" in report["context"]
 
 
+def test_bug_report_saves_in_place_without_losing_grammar_card(client, db):
+    client.get("/grammar/practice/card?level=1&mode=production")
+    before = db.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()[0]
+    response = client.post("/bug", data={
+        "ref": "#G2-test",
+        "note": "tree is unknown",
+        "context": "公园里有很多树。 — There are many trees in the park.",
+        "return_to": "/grammar",
+    }, headers={"X-Requested-With": "hanlu"})
+    assert response.json() == {"ok": True, "saved": True}
+    after = db.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()[0]
+    assert after == before
+    script = client.get("/static/practice.js").text
+    assert "Report saved — continue this card." in script
+    assert 'event.preventDefault()' in script
+
+
 def test_grammar_reference_and_comprehension_practice(client, db):
     page = client.get("/grammar")
     assert page.status_code == 200
@@ -398,6 +424,52 @@ def test_natural_chinese_variant_is_accepted():
     assert _grammar_match(
         "桌上没有一本书", "桌上有一本书。", "production"
     )[0] == "incorrect"
+
+
+def test_grammar_production_accepts_english_vocabulary_placeholder(client, db):
+    tree_id = db.execute(
+        "INSERT INTO item(headword,pinyin,gloss,hsk_bands) "
+        "VALUES('树','shù','tree; to cultivate','1')"
+    ).lastrowid
+    grammar_id = db.execute(
+        "SELECT id FROM grammar_point WHERE title_zh='有字句'"
+    ).fetchone()[0]
+    example = [{
+        "zh": "公园里有很多树。",
+        "en": "There are many trees in the park.",
+    }]
+    db.execute(
+        "UPDATE grammar_point SET practice_examples_json=? WHERE id=?",
+        (json.dumps(example, ensure_ascii=False), grammar_id),
+    )
+    db.execute("UPDATE learner SET declared_hsk_band=1 WHERE id=1")
+    db.commit()
+
+    card = client.get(
+        f"/grammar/practice/card?grammar_id={grammar_id}&mode=production"
+    )
+    assert "Sentence vocabulary" in card.text
+    assert "Expected known" in card.text
+    assert "Add to practice" in card.text
+    assert 'data-vocab-knowledge' in card.text
+
+    answer = client.post(
+        "/grammar/answer", data={"response": "公园里有很多tree"}
+    )
+    assert "Grammar correct · vocabulary supplied" in answer.text
+    assert "tree" in answer.text
+    assert "树" in answer.text
+    attempt = db.execute(
+        "SELECT correct,hints_used,match_kind FROM grammar_attempt "
+        "ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    assert tuple(attempt) == (1, 1, "accepted_with_vocab_help")
+    assert db.execute(
+        "SELECT status FROM item_knowledge_override WHERE item_id=?", (tree_id,)
+    ).fetchone()[0] == "needs_practice"
+    assert db.execute(
+        "SELECT COUNT(*) FROM memory_state WHERE item_id=?", (tree_id,)
+    ).fetchone()[0] == 2
 
 
 def test_manual_grammar_override(client, db):

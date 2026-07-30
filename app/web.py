@@ -365,45 +365,47 @@ def snooze_item(item_id: int, days: int = Form(7), conn=Depends(get_conn)):
     return RedirectResponse("/session/next?snoozed=1", 303)
 
 
+def _set_item_needs_practice(conn, item_id: int) -> None:
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    conn.execute(
+        "INSERT INTO item_knowledge_override(user_id,item_id,status,updated_ts) "
+        "VALUES(1,?,'needs_practice',?) ON CONFLICT(user_id,item_id) DO UPDATE "
+        "SET status=excluded.status,updated_ts=excluded.updated_ts",
+        (item_id, now_iso),
+    )
+    for facet in config.FACETS:
+        previous = conn.execute(
+            "SELECT * FROM memory_state WHERE user_id=1 AND item_id=? AND facet=?",
+            (item_id, facet),
+        ).fetchone()
+        card = json.loads(previous["card_json"]) if previous else scheduler.new_state(now)
+        card["due"] = now_iso
+        conn.execute(
+            "INSERT INTO memory_state(user_id,item_id,facet,difficulty,stability,"
+            "last_review_ts,due_ts,lapses,suspended,card_json,seeded) "
+            "VALUES(1,?,?,?,?,?,?,?,?,?,0) ON CONFLICT(user_id,item_id,facet) "
+            "DO UPDATE SET due_ts=excluded.due_ts,suspended=0,"
+            "card_json=excluded.card_json,seeded=0",
+            (
+                item_id, facet,
+                previous["difficulty"] if previous else card.get("difficulty"),
+                previous["stability"] if previous else card.get("stability"),
+                previous["last_review_ts"] if previous else None,
+                now_iso, previous["lapses"] if previous else 0, 0,
+                json.dumps(card),
+            ),
+        )
+
+
 @app.post("/item/{item_id}/knowledge")
-def set_item_knowledge(item_id: int, state: str = Form("needs_practice"),
+def set_item_knowledge(request: Request, item_id: int,
+                       state: str = Form("needs_practice"),
                        return_to: str = Form("/vocab"), conn=Depends(get_conn)):
     if not conn.execute("SELECT 1 FROM item WHERE id=?", (item_id,)).fetchone():
         return Response("Word not found", 404)
     if state == "needs_practice":
-        now = datetime.now(timezone.utc)
-        now_iso = now.isoformat()
-        conn.execute(
-            "INSERT INTO item_knowledge_override(user_id,item_id,status,updated_ts) "
-            "VALUES(1,?,'needs_practice',?) ON CONFLICT(user_id,item_id) DO UPDATE "
-            "SET status=excluded.status,updated_ts=excluded.updated_ts",
-            (item_id, now_iso),
-        )
-        for facet in config.FACETS:
-            previous = conn.execute(
-                "SELECT * FROM memory_state WHERE user_id=1 AND item_id=? AND facet=?",
-                (item_id, facet),
-            ).fetchone()
-            card = (
-                json.loads(previous["card_json"])
-                if previous else scheduler.new_state(now)
-            )
-            card["due"] = now_iso
-            conn.execute(
-                "INSERT INTO memory_state(user_id,item_id,facet,difficulty,stability,"
-                "last_review_ts,due_ts,lapses,suspended,card_json,seeded) "
-                "VALUES(1,?,?,?,?,?,?,?,?,?,0) ON CONFLICT(user_id,item_id,facet) "
-                "DO UPDATE SET due_ts=excluded.due_ts,suspended=0,"
-                "card_json=excluded.card_json,seeded=0",
-                (
-                    item_id, facet,
-                    previous["difficulty"] if previous else card.get("difficulty"),
-                    previous["stability"] if previous else card.get("stability"),
-                    previous["last_review_ts"] if previous else None,
-                    now_iso, previous["lapses"] if previous else 0, 0,
-                    json.dumps(card),
-                ),
-            )
+        _set_item_needs_practice(conn, item_id)
     elif state == "auto":
         conn.execute(
             "DELETE FROM item_knowledge_override WHERE user_id=1 AND item_id=?",
@@ -412,6 +414,8 @@ def set_item_knowledge(item_id: int, state: str = Form("needs_practice"),
     else:
         return Response("Invalid knowledge state", 400)
     conn.commit()
+    if request.headers.get("X-Requested-With") == "hanlu":
+        return {"ok": True, "state": state}
     safe_return = return_to if return_to.startswith("/") and not return_to.startswith("//") else "/vocab"
     return RedirectResponse(safe_return, 303)
 
@@ -775,19 +779,97 @@ def complete_story_sentence(story_id: int, sentence_index: int,
     }
 
 
-def _grammar_hints(conn, zh: str) -> list[dict]:
+def _tracked_subtokens(value: str, lexicon: set[str]) -> list[str]:
+    """Split an untracked Jieba chunk into the longest tracked dictionary words."""
+    result = []
+    position = 0
+    while position < len(value):
+        matches = [
+            word for word in lexicon
+            if value.startswith(word, position)
+        ]
+        if matches:
+            match = max(matches, key=len)
+            result.append(match)
+            position += len(match)
+        else:
+            position += 1
+    return result
+
+
+def _grammar_vocabulary(conn, zh: str) -> list[dict]:
     known = _known_headwords(conn)
     lexicon = {row["headword"] for row in conn.execute("SELECT headword FROM item")}
-    hints = []
-    for token in segment(zh, lexicon):
-        if token in known or not re.search(r"[\u3400-\u9fff]", token):
-            continue
+    vocabulary = []
+    tokens = []
+    for chunk in segment(zh, lexicon):
+        if chunk in lexicon:
+            tokens.append(chunk)
+        elif re.search(r"[\u3400-\u9fff]", chunk):
+            tokens.extend(_tracked_subtokens(chunk, lexicon))
+    for token in tokens:
         row = conn.execute(
-            "SELECT headword,pinyin,gloss,hsk_bands FROM item WHERE headword=?", (token,)
+            "SELECT i.id,i.headword,i.pinyin,i.gloss,i.hsk_bands,"
+            "iko.status knowledge_override FROM item i LEFT JOIN "
+            "item_knowledge_override iko ON iko.item_id=i.id AND iko.user_id=1 "
+            "WHERE i.headword=?", (token,)
         ).fetchone()
-        if row and not any(item["headword"] == token for item in hints):
-            hints.append(dict(row))
-    return hints
+        if row and not any(item["headword"] == token for item in vocabulary):
+            item = dict(row)
+            item["known"] = token in known
+            vocabulary.append(item)
+    return vocabulary
+
+
+ENGLISH_PLACEHOLDER_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "for", "from", "in", "is",
+    "it", "of", "on", "or", "the", "to", "was", "were", "with",
+}
+
+
+def _gloss_words(gloss: str) -> set[str]:
+    words = {
+        word.lower() for word in re.findall(r"[A-Za-z]+", gloss)
+        if len(word) >= 3 and word.lower() not in ENGLISH_PLACEHOLDER_STOPWORDS
+    }
+    return words | {word[:-1] for word in words if word.endswith("s") and len(word) > 3}
+
+
+def _replace_english_placeholders(conn, response: str, expected: str
+                                  ) -> tuple[str, list[dict], list[str]]:
+    vocabulary = _grammar_vocabulary(conn, expected)
+    matches: list[dict] = []
+    unresolved: list[str] = []
+    resolved = response
+    english_tokens = re.findall(
+        r"(?<![A-Za-z])[A-Za-z][A-Za-z'-]*(?![A-Za-z])", response
+    )
+    for english in dict.fromkeys(english_tokens):
+        normalized = english.lower()
+        normalized_singular = (
+            normalized[:-1] if normalized.endswith("s") and len(normalized) > 3
+            else normalized
+        )
+        candidates = [
+            item for item in vocabulary
+            if normalized in _gloss_words(item["gloss"])
+            or normalized_singular in _gloss_words(item["gloss"])
+        ]
+        if len(candidates) == 1:
+            item = candidates[0]
+            resolved = re.sub(
+                rf"(?<![A-Za-z]){re.escape(english)}(?![A-Za-z])",
+                item["headword"], resolved,
+                flags=re.IGNORECASE,
+            )
+            matches.append({
+                "english": english, "item_id": item["id"],
+                "headword": item["headword"], "pinyin": item["pinyin"],
+                "gloss": item["gloss"],
+            })
+        else:
+            unresolved.append(english)
+    return resolved, matches, unresolved
 
 
 def _grammar_examples(point, include_extra: bool = True) -> list[dict]:
@@ -1008,7 +1090,8 @@ def grammar_practice(request: Request, level: int = 0, grammar_id: int = 0,
     )
     conn.commit()
     return render(request, "grammar_question.html", point=dict(point), plan=plan,
-                  choices=choices, hints=_grammar_hints(conn, example["zh"]))
+                  choices=choices,
+                  vocabulary=_grammar_vocabulary(conn, example["zh"]))
 
 
 def _normalize_answer(value: str) -> str:
@@ -1084,15 +1167,37 @@ def grammar_answer(request: Request, response: str = Form(""),
     if not row:
         return RedirectResponse("/grammar", 303)
     plan = json.loads(row["plan_json"])
+    resolved_response = response
+    vocabulary_supplied: list[dict] = []
+    unresolved_placeholders: list[str] = []
+    if plan["direction"] == "production":
+        resolved_response, vocabulary_supplied, unresolved_placeholders = (
+            _replace_english_placeholders(conn, response, plan["expected"])
+        )
     match_kind, match_feedback = _grammar_match(
-        response, plan["expected"], plan["direction"]
+        resolved_response, plan["expected"], plan["direction"]
     )
+    if match_kind != "incorrect" and vocabulary_supplied:
+        match_kind = "accepted_with_vocab_help"
+        supplied = ", ".join(
+            f"{item['headword']} ({item['pinyin']}, {item['gloss'].split(';')[0]}) "
+            f"for “{item['english']}”"
+            for item in vocabulary_supplied
+        )
+        match_feedback = (
+            f"Your grammar is correct. I supplied {supplied}. "
+            "That vocabulary was added to practice and is not counted as "
+            "independently recalled."
+        )
+    for item in vocabulary_supplied:
+        _set_item_needs_practice(conn, item["item_id"])
     correct = match_kind != "incorrect"
+    effective_hints = hints_used + len(vocabulary_supplied)
     cursor = conn.execute(
         "INSERT INTO grammar_attempt(user_id,grammar_id,direction,prompt,response,"
         "correct,hints_used,ts,overridden,match_kind) VALUES(1,?,?,?,?,?,?,?,?,?)",
         (plan["grammar_id"], plan["direction"], plan["prompt"], response, int(correct),
-         hints_used, datetime.now(timezone.utc).isoformat(), 0, match_kind),
+         effective_hints, datetime.now(timezone.utc).isoformat(), 0, match_kind),
     )
     conn.commit()
     point = conn.execute(
@@ -1115,7 +1220,9 @@ def grammar_answer(request: Request, response: str = Form(""),
                   response=response or "I don’t know", correct=correct,
                   examples=_grammar_examples(point), match_kind=match_kind,
                   match_feedback=match_feedback,
-                  diff=_answer_diff(response, plan["expected"]),
+                  diff=_answer_diff(resolved_response, plan["expected"]),
+                  vocabulary_supplied=vocabulary_supplied,
+                  unresolved_placeholders=unresolved_placeholders,
                   attempt_id=cursor.lastrowid, ready_to_learn=ready_to_learn)
 
 
@@ -1180,7 +1287,8 @@ def save_settings(declared_hsk_band: int = Form(...), daily_new_items: int = For
 
 
 @app.post("/bug")
-def bug(ref: str = Form(""), note: str = Form(""), context: str = Form(""),
+def bug(request: Request, ref: str = Form(""), note: str = Form(""),
+        context: str = Form(""),
         return_to: str = Form("/"), conn=Depends(get_conn)):
     if note.strip():
         init_schema(conn)
@@ -1188,6 +1296,8 @@ def bug(ref: str = Form(""), note: str = Form(""), context: str = Form(""),
                      (ref[:80], note.strip(), context[:1200],
                       datetime.now(timezone.utc).isoformat()))
         conn.commit()
+    if request.headers.get("X-Requested-With") == "hanlu":
+        return {"ok": True, "saved": bool(note.strip())}
     return RedirectResponse(return_to if return_to.startswith("/") else "/", 303)
 
 

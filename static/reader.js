@@ -66,6 +66,12 @@
     const next = el("next");
     next.disabled = false;
     next.textContent = index === data.length - 1 ? "Finish story ✓" : "Next →";
+    const report = document.querySelector("[data-report-form]");
+    if (report) {
+      report.querySelector("input[name=ref]").value = `#S${storyId}-${index + 1}`;
+      report.querySelector("input[name=context]").value =
+        `${sentence.zh} — ${sentence.en}`;
+    }
     el("reader-card").focus();
   }
 
@@ -126,15 +132,20 @@
     audio.currentTime = 0;
     audio.play().catch(() => {});
   };
-  document.addEventListener("keydown", event => {
+  window.addEventListener("keydown", event => {
     if (typing(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
-    if (event.key === "ArrowLeft") move(-1);
-    else if (event.key === "ArrowRight") completeAndMove();
-    else if (event.key.toLowerCase() === "a") el("audio").click();
-    else if (event.key.toLowerCase() === "z") el("characters").click();
-    else if (event.key.toLowerCase() === "p") el("pinyin").click();
-    else if (event.key.toLowerCase() === "t") el("translation").click();
-    else if (event.key.toLowerCase() === "m") toggleMode();
-  });
+    const key = event.key.toLowerCase();
+    const code = event.code;
+    let handled = true;
+    if (key === "arrowleft") move(-1);
+    else if (key === "arrowright") completeAndMove();
+    else if (key === "a" || code === "KeyA") el("audio").click();
+    else if (key === "z" || code === "KeyZ") el("characters").click();
+    else if (key === "p" || code === "KeyP") el("pinyin").click();
+    else if (key === "t" || code === "KeyT") el("translation").click();
+    else if (key === "m" || code === "KeyM") toggleMode();
+    else handled = false;
+    if (handled) event.preventDefault();
+  }, {capture: true});
   render();
 })();

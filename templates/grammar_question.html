@@ -12,8 +12,13 @@
       <button type="button" class="speak-chinese" data-zh="{{ plan.zh }}">A · Audio</button>
     </div><p id="question-pinyin" class="example-pinyin centered" hidden>{{ plan.pinyin }}</p>{% endif %}
     <p class="pattern-reminder">{{ point.pattern }}</p>
-    {% if hints %}<details class="vocab-help"><summary>Vocabulary help · {{ hints|length }} unfamiliar word{{ '' if hints|length == 1 else 's' }}</summary>
-      <div>{% for hint in hints %}<span><b>{{ hint.headword }}</b><i>{{ hint.pinyin }}</i>{{ hint.gloss }} <small>HSK {{ hint.hsk_bands }}</small></span>{% endfor %}</div>
+    {% if vocabulary %}<details class="vocab-help"><summary>Sentence vocabulary · {{ vocabulary|length }} word{{ '' if vocabulary|length == 1 else 's' }}</summary>
+      <p class="vocab-help-note">Open this whenever vocabulary gets in the way. Grammar is still what this exercise grades.</p>
+      <div>{% for word in vocabulary %}<article class="vocab-help-word">
+        <b>{{ word.headword }}</b><i>{{ word.pinyin }}</i><em>{{ word.gloss }}</em>
+        <small class="{{ 'expected-known' if word.known else 'helper-word' }}">{{ 'Expected known' if word.known else 'Helper word' }} · HSK {{ word.hsk_bands }}</small>
+        {% if word.knowledge_override == 'needs_practice' %}<span class="vocab-practice-state">In practice queue</span>{% else %}<form method="post" action="/item/{{ word.id }}/knowledge" data-vocab-knowledge><input type="hidden" name="state" value="needs_practice"><input type="hidden" name="return_to" value="/grammar"><button type="submit">Add to practice</button><span aria-live="polite"></span></form>{% endif %}
+      </article>{% endfor %}</div>
     </details>{% endif %}
     <form class="{{ 'choices' if plan.direction == 'comprehension' else 'production-answer' }}" method="post" action="/grammar/answer">
       {% if plan.direction == 'comprehension' %}
@@ -26,7 +31,7 @@
     </form>
     {% if plan.direction == 'comprehension' %}<p class="shortcut-legend"><kbd>1–4</kbd> answer · <kbd>0</kbd> don’t know</p>{% endif %}
   </article>
-  {% set ref = plan.ref %}{% set report_context = plan.zh ~ ' — ' ~ plan.en ~ ' · ' ~ point.title_en %}{% set report_return_to = '/grammar' %}{% include "_report.html" %}
+  {% set ref = plan.ref %}{% set report_context = plan.zh ~ ' — ' ~ plan.en ~ ' · ' ~ point.title_en %}{% set report_return_to = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}{% include "_report.html" %}
 </section>
 <script src="/static/practice.js"></script>
 <script src="/static/grammar.js"></script>

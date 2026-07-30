@@ -1,3 +1,3 @@
 <details class="report"><summary>Flag a problem with this card</summary>
-  <form method="post" action="/bug"><input type="hidden" name="ref" value="{{ ref }}"><input type="hidden" name="context" value="{{ report_context|default('') }}"><input type="hidden" name="return_to" value="{{ report_return_to|default('/session/next') }}"><textarea name="note" placeholder="What felt wrong? Audio, translation, answer…"></textarea><button>Save report</button></form>
+  <form method="post" action="/bug" data-report-form><input type="hidden" name="ref" value="{{ ref }}"><input type="hidden" name="context" value="{{ report_context|default('') }}"><input type="hidden" name="return_to" value="{{ report_return_to|default('/session/next') }}"><textarea name="note" placeholder="What felt wrong? Audio, translation, answer…"></textarea><button>Save report</button><span class="report-state" data-report-state aria-live="polite"></span></form>
 </details>

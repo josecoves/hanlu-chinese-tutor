@@ -12,8 +12,10 @@
   <section class="reader-vocabulary"><div><span>VOCABULARY IN THIS SENTENCE</span><p>Going next marks every word studied. Toggle only the words you want to keep practicing.</p></div><div id="reader-words"></div><p id="reader-save-state" role="status"></p></section>
   <div class="reader-controls"><button id="prev">← Previous</button><button id="audio">A · Audio</button><button id="characters">Z · Characters</button><button id="pinyin">P · Pinyin</button><button id="translation">T · Translation</button><button id="next">Next →</button></div>
   <p class="legend"><kbd>←</kbd><kbd>→</kbd> move · <kbd>A</kbd> audio · <kbd>Z</kbd> characters · <kbd>P</kbd> pinyin · <kbd>T</kbd> translation · <kbd>M</kbd> mode</p>
+  {% set ref = '#S' ~ story.id ~ '-1' %}{% set report_context = sentences[0].zh ~ ' — ' ~ sentences[0].en ~ ' · ' ~ story.title_en %}{% set report_return_to = '/story/' ~ story.id %}{% include "_report.html" %}
 </section>
 <script id="story-data" type="application/json">{{ {"story_id": story.id, "start_index": start_index, "sentences": sentences}|tojson }}</script>
 <script src="/static/story-status.js"></script>
-<script src="/static/reader.js"></script>
+<script src="/static/practice.js"></script>
+<script src="/static/reader.js?v=2"></script>
 {% endblock %}
