@@ -525,6 +525,16 @@ def test_natural_chinese_variant_is_accepted():
     )
     assert kind == "accepted_variant"
     assert "different level of formality" in note
+    kind, note = _grammar_match(
+        "今天冷吗？", "今天很冷吗？", "production"
+    )
+    assert kind == "accepted_variant"
+    assert "both natural" in note
+    kind, note = _grammar_match(
+        "你现在忙吗？", "你们现在忙吗？", "production"
+    )
+    assert kind == "accepted_variant"
+    assert "singular or plural" in note
 
 
 def test_grammar_production_accepts_english_vocabulary_placeholder(client, db):

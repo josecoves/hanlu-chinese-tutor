@@ -1129,6 +1129,8 @@ BENIGN_CHINESE_VARIANTS = (
     ("哪里", "哪儿"),
     ("星期", "周"),
     ("你们国家", "你国家"),
+    ("今天很冷吗", "今天冷吗"),
+    ("你们现在忙吗", "你现在忙吗"),
     ("您", "你"),
 )
 PROTECTED_GRAMMAR_MARKERS = ("不", "没", "别", "了", "过", "着", "把", "被", "比", "吗")
@@ -1172,6 +1174,18 @@ def _grammar_match(response: str, expected: str, direction: str) -> tuple[str, s
                 "Your 吗 question is correct and 你国家 is understandable in "
                 "conversation. 你们国家 is the more standard written form for "
                 "“your country.”",
+            )
+        if "今天冷吗" in response and "今天很冷吗" in expected:
+            return (
+                "accepted_variant",
+                "今天冷吗？ and 今天很冷吗？ are both natural yes–no questions. "
+                "The degree adverb 很 is optional here.",
+            )
+        if "你现在忙吗" in response and "你们现在忙吗" in expected:
+            return (
+                "accepted_variant",
+                "English “you” can be singular or plural. 你现在忙吗？ is correct "
+                "for one person; 你们现在忙吗？ addresses several people.",
             )
         if ("您" in response) != ("您" in expected):
             return (
