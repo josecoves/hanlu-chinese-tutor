@@ -41,6 +41,11 @@ offer next-in-order, next-not-started, next-practicing, and next-learned
 navigation. Starting practice from a lesson page keeps every following card
 focused on that lesson.
 
+An untouched lesson becomes **Practicing** after its first attempt. An
+automatically managed lesson becomes **Learned** after at least eight attempts
+at 85% accuracy. Any status chosen manually remains under the learner's control,
+so focused practice is never silently removed after a deliberate change.
+
 Lesson guides separate structures, usage notes, and common pitfalls instead of
 showing only a short definition. Every grammar example provides optional pinyin
 and on-demand Mandarin audio; generated audio is cached locally after first use.
@@ -48,6 +53,29 @@ and on-demand Mandarin audio; generated audio is cached locally after first use.
 Practice screens support number keys `1`–`4`, `0` for “I don’t know,” `A` for
 audio, `P` for pinyin, `W` for word meaning, `T` for translation, and
 `Enter`/`→` for the next card when those controls are available.
+
+After a production answer, **Explain / verify with AI** requests an optional
+second opinion from DeepSeek. The review judges the lesson's target grammar
+separately from incidental vocabulary, punctuation, register, and natural
+alternatives. A confident accepted answer repairs its score automatically; a
+grader or curriculum problem also creates a maintenance report. Uncertain
+reviews never change the score. The result stays attached to the attempt in
+Progress, and Settings shows aggregate calls, tokens, estimated cost, and
+failures.
+
+To enable local AI review, create `.env.local` from the safe template and add a
+DeepSeek API key:
+
+```bash
+cp .env.example .env.local
+code .env.local
+```
+
+Restart `./run.sh` after saving the key. `.env.local` is ignored by Git and the
+key is never included in progress exports. Exercise text sent for a review does
+leave the laptop and is processed by DeepSeek; all other practice remains
+local. Without a key or internet connection, the same button saves the attempt
+to the existing offline review queue.
 
 Theory and practice use separate saved example pools: at least five examples
 appear in each lesson guide and at least ten different examples are randomized

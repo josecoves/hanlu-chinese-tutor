@@ -1,4 +1,6 @@
 import json
+import app.web as web_module
+from app.ai_review import AIReviewResult
 from app.web import _grammar_match, _grammar_vocabulary, _known_headwords
 
 
@@ -170,7 +172,7 @@ def test_story_status_and_sentence_vocabulary_update_progress(client, db):
         "AND exercise_type='story-context'", (tea_id,)
     ).fetchone()[0] == 2
     exported = client.get("/export/progress").json()
-    assert exported["schema"] == 4
+    assert exported["schema"] == 5
     assert any(
         row["title_zh"] == "喝茶" and row["headword"] == "茶"
         for row in exported["story_word_exposure"]
@@ -457,6 +459,45 @@ def test_grammar_status_can_autosave_from_index(client, db):
     assert script.index("new FormData(form)") < script.index("select.disabled = true")
 
 
+def test_grammar_attempts_advance_untouched_lesson_status(client, db):
+    point = db.execute(
+        "SELECT id FROM grammar_point WHERE title_zh='不和没'"
+    ).fetchone()
+    card = client.get(
+        f"/grammar/practice/card?grammar_id={point['id']}&mode=comprehension"
+    )
+    assert card.status_code == 200
+    plan = json.loads(db.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()[0])
+    client.post("/grammar/answer", data={"response": plan["expected"]})
+    state = db.execute(
+        "SELECT status,source FROM grammar_state WHERE grammar_id=?",
+        (point["id"],),
+    ).fetchone()
+    assert tuple(state) == ("practicing", "auto")
+
+    db.executemany(
+        "INSERT INTO grammar_attempt(user_id,grammar_id,direction,prompt,response,"
+        "expected,correct,hints_used,ts) VALUES(1,?,'comprehension','test','test',"
+        "'test',1,0,'2026-01-01T00:00:00+00:00')",
+        [(point["id"],)] * 6,
+    )
+    db.commit()
+    client.get(
+        f"/grammar/practice/card?grammar_id={point['id']}&mode=comprehension"
+    )
+    plan = json.loads(db.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()[0])
+    client.post("/grammar/answer", data={"response": plan["expected"]})
+    state = db.execute(
+        "SELECT status,source FROM grammar_state WHERE grammar_id=?",
+        (point["id"],),
+    ).fetchone()
+    assert tuple(state) == ("learned", "auto")
+
+
 def test_rich_grammar_guide_has_pinyin_audio_and_navigation(client, db):
     point = db.execute(
         "SELECT id FROM grammar_point WHERE title_zh='的字短语作名词'"
@@ -654,7 +695,9 @@ def test_manual_grammar_override(client, db):
     queued = client.post(
         f"/grammar/attempt/{cursor.lastrowid}/request-review"
     )
-    assert queued.json() == {"ok": True, "status": "pending"}
+    assert queued.json()["ok"] is True
+    assert queued.json()["status"] == "pending"
+    assert queued.json()["realtime"] is False
     assert db.execute(
         "SELECT status FROM grammar_review_request WHERE attempt_id=?",
         (cursor.lastrowid,),
@@ -663,7 +706,7 @@ def test_manual_grammar_override(client, db):
     assert "Answers saved for a second opinion" in progress.text
     assert "test" in progress.text
     exported = client.get("/export/progress").json()
-    assert exported["schema"] == 4
+    assert exported["schema"] == 5
     assert any(
         row["attempt_id"] == cursor.lastrowid and row["status"] == "pending"
         for row in exported["grammar_review_request"]
@@ -677,3 +720,83 @@ def test_manual_grammar_override(client, db):
         f"/grammar/attempt/{cursor.lastrowid}/cancel-review"
     )
     assert cancelled.json() == {"ok": True, "status": "cancelled"}
+
+
+def test_realtime_ai_review_repairs_score_and_tracks_cost(client, db, monkeypatch):
+    grammar_id = db.execute(
+        "SELECT id FROM grammar_point WHERE title_zh='有字句'"
+    ).fetchone()[0]
+    cursor = db.execute(
+        "INSERT INTO grammar_attempt(user_id,grammar_id,direction,prompt,response,"
+        "expected,correct,hints_used,ts,match_kind) VALUES(1,?,'production',"
+        "'There is a book on the table.','桌子上有一本书','桌上有一本书。',"
+        "0,0,'2026-01-01T00:00:00+00:00','incorrect')",
+        (grammar_id,),
+    )
+    db.commit()
+    result = AIReviewResult(
+        verdict="acceptable",
+        target_grammar_correct=True,
+        confidence=0.96,
+        explanation="桌子上 and 桌上 are both natural here.",
+        suggested_answer="桌子上有一本书。",
+        differences=("桌子上 is a slightly fuller location phrase.",),
+        curriculum_issue=True,
+        maintenance_note="Accept 桌子上 as an equivalent to 桌上.",
+        provider="deepseek",
+        model="deepseek-v4-flash",
+        input_tokens=600,
+        output_tokens=120,
+        cache_hit_tokens=400,
+        cache_miss_tokens=200,
+        estimated_cost_usd=0.000062,
+    )
+    monkeypatch.setattr(web_module, "ai_review_configured", lambda: True)
+    monkeypatch.setattr(
+        web_module, "review_grammar_attempt", lambda attempt, point: result
+    )
+
+    response = client.post(
+        f"/grammar/attempt/{cursor.lastrowid}/request-review"
+    )
+    assert response.json() == {
+        "ok": True,
+        "status": "resolved",
+        "realtime": True,
+        "decision": "acceptable",
+        "correct": True,
+    }
+    attempt = db.execute(
+        "SELECT correct,overridden,match_kind FROM grammar_attempt WHERE id=?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    assert tuple(attempt) == (1, 0, "ai_accepted")
+    review = db.execute(
+        "SELECT status,provider,model,decision,confidence,target_grammar_correct,"
+        "curriculum_issue FROM grammar_review_request WHERE attempt_id=?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    assert tuple(review[:4]) == (
+        "resolved", "deepseek", "deepseek-v4-flash", "acceptable"
+    )
+    assert review["confidence"] == 0.96
+    assert review["target_grammar_correct"] == 1
+    assert review["curriculum_issue"] == 1
+    usage = db.execute(
+        "SELECT status,input_tokens,output_tokens,estimated_cost_usd "
+        "FROM ai_usage WHERE attempt_id=?", (cursor.lastrowid,)
+    ).fetchone()
+    assert tuple(usage[:3]) == ("ok", 600, 120)
+    assert usage["estimated_cost_usd"] == 0.000062
+    report = db.execute(
+        "SELECT ref,note FROM bug_report WHERE ref=?",
+        (f"#AI-G{grammar_id}-A{cursor.lastrowid}",),
+    ).fetchone()
+    assert report
+    assert "Accept 桌子上" in report["note"]
+    assert "DeepSeek is connected" in client.get("/settings").text
+    progress = client.get("/progress")
+    assert "桌子上 and 桌上 are both natural" in progress.text
+    exported = client.get("/export/progress").json()
+    assert exported["schema"] == 5
+    assert exported["ai_usage"][0]["input_tokens"] == 600

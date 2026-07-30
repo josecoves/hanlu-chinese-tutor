@@ -102,13 +102,18 @@
       : button.hasAttribute("data-request-ai-review") ? "request"
       : "cancel";
     button.disabled = true;
-    if (state) state.textContent = "Updating…";
+    if (state) {
+      state.textContent = action === "request"
+        ? "AI is checking the grammar…"
+        : "Updating…";
+    }
     try {
       const response = await fetch(button.dataset.url, {
         method: "POST",
         headers: {"X-Requested-With": "hanlu"}
       });
       if (!response.ok) throw new Error("grading action failed");
+      const payload = await response.json();
       const verdict = document.getElementById("grammar-verdict");
       const comparison = document.getElementById("answer-comparison");
       if (action === "accept") {
@@ -134,13 +139,18 @@
         button.textContent = "Mark correct myself";
         if (state) state.textContent = "Your override was undone";
       } else if (action === "request") {
+        if (payload.status === "resolved") {
+          if (state) state.textContent = "AI review ready";
+          window.location.reload();
+          return;
+        }
         button.removeAttribute("data-request-ai-review");
         button.setAttribute("data-cancel-ai-review", "");
         button.dataset.url = button.dataset.url.replace(
           "/request-review", "/cancel-review"
         );
-        button.textContent = "AI review queued ✓ · remove";
-        if (state) state.textContent = "Saved for a later AI check";
+        button.textContent = "AI review pending ✓ · remove";
+        if (state) state.textContent = payload.message || "Saved for a later AI check";
       } else {
         button.removeAttribute("data-cancel-ai-review");
         button.setAttribute("data-request-ai-review", "");

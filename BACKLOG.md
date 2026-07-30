@@ -1,13 +1,13 @@
 # Hanlu product backlog
 
-## AI-assisted answer review
+## AI-assisted answer review follow-ups
 
-- Replace the current queued review workflow with an optional real-time AI
-  second opinion.
-- The AI should judge the grammar point being practiced separately from
-  vocabulary, register, spelling, and naturalness.
-- Return a short verdict, explain meaningful differences, and never interrupt
-  the next-card flow with a mandatory dialog.
+- Compare a second low-cost provider against DeepSeek before making provider
+  choice configurable.
+- Use confirmed maintenance reports to expand deterministic accepted-answer
+  variants and reduce repeated AI calls.
+- Add a compact per-month budget warning without blocking reviews.
+- Keep the second opinion optional and out of the next-card flow.
 
 ## Personalized weekly coaching
 
@@ -28,4 +28,3 @@
   label it rather than grading the learner on an unintroduced structure.
 - Review queued answer disputes in batches and feed confirmed corrections back
   into the deterministic grader and curated exercise bank.
-

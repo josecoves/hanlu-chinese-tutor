@@ -99,12 +99,28 @@ CREATE TABLE IF NOT EXISTS grammar_review_request (
   status TEXT NOT NULL DEFAULT 'pending'
     CHECK(status IN ('pending','resolved','cancelled')),
   requested_ts TEXT NOT NULL, resolved_ts TEXT, decision TEXT NOT NULL DEFAULT '',
-  explanation TEXT NOT NULL DEFAULT '',
+  explanation TEXT NOT NULL DEFAULT '', provider TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '', confidence REAL NOT NULL DEFAULT 0,
+  target_grammar_correct INTEGER NOT NULL DEFAULT 0,
+  suggested_answer TEXT NOT NULL DEFAULT '', differences_json TEXT NOT NULL DEFAULT '[]',
+  curriculum_issue INTEGER NOT NULL DEFAULT 0,
+  maintenance_note TEXT NOT NULL DEFAULT '',
+  FOREIGN KEY(attempt_id) REFERENCES grammar_attempt(id)
+);
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, attempt_id INTEGER,
+  provider TEXT NOT NULL, model TEXT NOT NULL, status TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_hit_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
+  estimated_cost_usd REAL NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',
+  ts TEXT NOT NULL,
   FOREIGN KEY(attempt_id) REFERENCES grammar_attempt(id)
 );
 CREATE TABLE IF NOT EXISTS grammar_state (
   user_id INTEGER NOT NULL, grammar_id INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'not_started', updated_ts TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual',
   PRIMARY KEY(user_id,grammar_id), FOREIGN KEY(grammar_id) REFERENCES grammar_point(id)
 );
 CREATE TABLE IF NOT EXISTS grammar_session (
@@ -124,6 +140,19 @@ MIGRATIONS = {
         "overridden": "INTEGER NOT NULL DEFAULT 0",
         "match_kind": "TEXT NOT NULL DEFAULT 'exact'",
         "expected": "TEXT NOT NULL DEFAULT ''",
+    },
+    "grammar_review_request": {
+        "provider": "TEXT NOT NULL DEFAULT ''",
+        "model": "TEXT NOT NULL DEFAULT ''",
+        "confidence": "REAL NOT NULL DEFAULT 0",
+        "target_grammar_correct": "INTEGER NOT NULL DEFAULT 0",
+        "suggested_answer": "TEXT NOT NULL DEFAULT ''",
+        "differences_json": "TEXT NOT NULL DEFAULT '[]'",
+        "curriculum_issue": "INTEGER NOT NULL DEFAULT 0",
+        "maintenance_note": "TEXT NOT NULL DEFAULT ''",
+    },
+    "grammar_state": {
+        "source": "TEXT NOT NULL DEFAULT 'manual'",
     },
 }
 

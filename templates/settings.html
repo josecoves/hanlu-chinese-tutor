@@ -13,4 +13,15 @@
   <div class="band-samples"><span class="eyebrow">WHAT THE BANDS FEEL LIKE</span>
   {% for band, words in samples.items() %}<article><b>HSK {{ band }}</b><div>{% for word in words %}<span><strong>{{ word.headword }}</strong>{{ word.gloss }}</span>{% endfor %}</div></article>{% endfor %}</div>
 </section>
+<section class="section ai-settings">
+  <div class="section-heading"><div><span class="eyebrow">LOCAL AI REVIEW</span><h2>{{ 'DeepSeek is connected' if ai_configured else 'DeepSeek is not connected yet' }}</h2></div><span class="ai-connection {{ 'connected' if ai_configured else 'offline' }}">{{ 'Ready' if ai_configured else 'Key needed' }}</span></div>
+  <p>Grammar answers are sent only when you click Explain / verify. The API key stays in the local environment and is never stored in Hanlu progress or exported to GitHub.</p>
+  <div class="ai-usage-grid">
+    <article><strong>{{ ai_usage.calls or 0 }}</strong><span>AI checks</span></article>
+    <article><strong>{{ (ai_usage.input_tokens or 0) + (ai_usage.output_tokens or 0) }}</strong><span>tokens</span></article>
+    <article><strong>${{ '%.4f'|format(ai_usage.estimated_cost_usd or 0) }}</strong><span>estimated cost</span></article>
+    <article><strong>{{ ai_usage.failed or 0 }}</strong><span>failed calls</span></article>
+  </div>
+  <small>Model: {{ ai_model }} · Cost is estimated from saved token usage and current configured rates.</small>
+</section>
 {% endblock %}
