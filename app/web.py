@@ -21,6 +21,7 @@ from .grammar_theory import build_guide
 from .seed import apply_declaration
 from .segment import segment
 from .grammar import seed_grammar
+from .grammar_examples import ANCHORS
 from .tts import synthesize
 
 templates = Jinja2Templates(directory=str(config.ROOT / "templates"))
@@ -797,8 +798,10 @@ def _tracked_subtokens(value: str, lexicon: set[str]) -> list[str]:
     return result
 
 
-def _grammar_vocabulary(conn, zh: str) -> list[dict]:
+def _grammar_vocabulary(conn, zh: str,
+                        excluded_headwords: set[str] | None = None) -> list[dict]:
     known = _known_headwords(conn)
+    excluded_headwords = excluded_headwords or set()
     lexicon = {row["headword"] for row in conn.execute("SELECT headword FROM item")}
     vocabulary = []
     tokens = []
@@ -808,6 +811,11 @@ def _grammar_vocabulary(conn, zh: str) -> list[dict]:
         elif re.search(r"[\u3400-\u9fff]", chunk):
             tokens.extend(_tracked_subtokens(chunk, lexicon))
     for token in tokens:
+        if any(
+            token == marker or (len(marker) == 1 and token.startswith(marker))
+            for marker in excluded_headwords
+        ):
+            continue
         row = conn.execute(
             "SELECT i.id,i.headword,i.pinyin,i.gloss,i.hsk_bands,"
             "iko.status knowledge_override FROM item i LEFT JOIN "
@@ -816,6 +824,11 @@ def _grammar_vocabulary(conn, zh: str) -> list[dict]:
         ).fetchone()
         if row and not any(item["headword"] == token for item in vocabulary):
             item = dict(row)
+            if token == "没":
+                # 没 is polyphonic. In beginner negation sentences it is always
+                # méi ("not; have not"), not mò ("to drown; to end").
+                item["pinyin"] = "méi"
+                item["gloss"] = "not; have not"
             item["known"] = token in known
             vocabulary.append(item)
     return vocabulary
@@ -1106,6 +1119,7 @@ def grammar_practice(request: Request, level: int = 0, grammar_id: int = 0,
         "ref": f"#G{point['id']}-{hashlib.sha1(example['zh'].encode()).hexdigest()[:6]}",
         "scope": scope, "focus_id": grammar_id, "requested_level": level,
         "choices": choices, "seen_by_grammar": seen_by_grammar,
+        "tested_markers": list(ANCHORS.get(point["title_zh"], ())),
     }
     conn.execute(
         "INSERT INTO grammar_session(id,plan_json) VALUES(1,?) "
@@ -1115,7 +1129,9 @@ def grammar_practice(request: Request, level: int = 0, grammar_id: int = 0,
     conn.commit()
     return render(request, "grammar_question.html", point=dict(point), plan=plan,
                   choices=choices,
-                  vocabulary=_grammar_vocabulary(conn, example["zh"]))
+                  vocabulary=_grammar_vocabulary(
+                      conn, example["zh"], set(plan["tested_markers"])
+                  ))
 
 
 def _normalize_answer(value: str) -> str:
@@ -1150,6 +1166,13 @@ def _grammar_match(response: str, expected: str, direction: str) -> tuple[str, s
         return "exact", ""
     if direction != "production":
         return "incorrect", ""
+    if {actual, target} == {"妈妈今天没上班", "妈妈今天没工作"}:
+        return (
+            "accepted_variant",
+            "没上班 focuses on not going to or being at work, while 没工作 "
+            "focuses on not working. Both are natural answers here, and both "
+            "use 没 correctly for a past non-event.",
+        )
     if actual.replace("她", "他").replace("它", "他") == (
         target.replace("她", "他").replace("它", "他")
     ):
@@ -1323,7 +1346,9 @@ def grammar_current(request: Request, conn=Depends(get_conn)):
     return render(
         request, "grammar_question.html", point=dict(point), plan=plan,
         choices=plan.get("choices", []),
-        vocabulary=_grammar_vocabulary(conn, plan["zh"]),
+        vocabulary=_grammar_vocabulary(
+            conn, plan["zh"], set(plan.get("tested_markers", ()))
+        ),
     )
 
 

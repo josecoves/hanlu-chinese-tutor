@@ -46,6 +46,29 @@ ANCHORS = {
 REQUIRE_ALL = {"因为所以", "从到结构", "转折复句", "虽然但是", "一边一边", "除了以外"}
 
 CURATED_EXAMPLE_SETS = {
+    "不和没": {
+        "theory": [
+            ("我不喝咖啡。", "I do not drink coffee."),
+            ("他昨天没来。", "He did not come yesterday."),
+            ("她不喜欢茶。", "She does not like tea."),
+            ("我没有妹妹。", "I do not have a younger sister."),
+            ("我今天没吃饭。", "I did not eat today."),
+        ],
+        "practice": [
+            ("我不喝茶。", "I do not drink tea."),
+            ("他不吃米饭。", "He does not eat rice."),
+            ("她今天不忙。", "She is not busy today."),
+            ("我明天不去学校。", "I am not going to school tomorrow."),
+            ("我们不看电视。", "We do not watch television."),
+            ("他昨天没来。", "He did not come yesterday."),
+            ("我没吃早饭。", "I did not eat breakfast."),
+            ("她没有哥哥。", "She does not have an older brother."),
+            ("我没有钱。", "I do not have money."),
+            ("你昨天没上课。", "You did not attend class yesterday."),
+            ("妈妈今天没上班。", "Mom did not work today."),
+            ("他没喝咖啡。", "He did not drink coffee."),
+        ],
+    },
     "吗问句": {
         "theory": [
             ("你是老师吗？", "Are you a teacher?"),

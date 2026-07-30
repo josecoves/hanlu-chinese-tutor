@@ -1,5 +1,5 @@
 import json
-from app.web import _grammar_match, _known_headwords
+from app.web import _grammar_match, _grammar_vocabulary, _known_headwords
 
 
 def test_home_and_vocab(client):
@@ -378,6 +378,22 @@ def test_grammar_reference_and_comprehension_practice(client, db):
         marker in row["zh"] for row in ma_practice
         for marker in ("的吗", "了吗", "在您国家的人是")
     )
+    negation_sets = db.execute(
+        "SELECT theory_examples_json,practice_examples_json FROM grammar_point "
+        "WHERE title_zh='不和没'"
+    ).fetchone()
+    negation_theory = json.loads(negation_sets["theory_examples_json"])
+    negation_practice = json.loads(negation_sets["practice_examples_json"])
+    assert len(negation_theory) >= 5
+    assert len(negation_practice) >= 10
+    assert all(
+        any(marker in row["zh"] for marker in ("不", "没"))
+        for row in negation_practice
+    )
+    assert not any(
+        marker in row["zh"] for row in negation_practice
+        for marker in ("什么话也", "什么也", "什么都", "是不是")
+    )
     card = client.get("/grammar/practice/card?level=1&mode=comprehension")
     assert card.status_code == 200
     assert 'data-choice-index="1"' in card.text
@@ -535,6 +551,11 @@ def test_natural_chinese_variant_is_accepted():
     )
     assert kind == "accepted_variant"
     assert "singular or plural" in note
+    kind, note = _grammar_match(
+        "妈妈今天没上班", "妈妈今天没工作。", "production"
+    )
+    assert kind == "accepted_variant"
+    assert "Both are natural" in note
 
 
 def test_grammar_production_accepts_english_vocabulary_placeholder(client, db):
@@ -581,6 +602,22 @@ def test_grammar_production_accepts_english_vocabulary_placeholder(client, db):
     assert db.execute(
         "SELECT COUNT(*) FROM memory_state WHERE item_id=?", (tree_id,)
     ).fetchone()[0] == 2
+
+
+def test_grammar_vocabulary_uses_contextual_reading_for_mei(client, db):
+    db.execute(
+        "INSERT INTO item(headword,pinyin,gloss,hsk_bands) "
+        "VALUES('没','mò','drowned; to end','1')"
+    )
+    db.commit()
+    card = client.get("/grammar/practice/card?grammar_id=4&mode=production")
+    assert card.status_code == 200
+    vocabulary = _grammar_vocabulary(db, "他昨天没来。")
+    mei = next(item for item in vocabulary if item["headword"] == "没")
+    assert mei["pinyin"] == "méi"
+    assert mei["gloss"] == "not; have not"
+    hidden = _grammar_vocabulary(db, "他昨天没来。", {"不", "没"})
+    assert not any(item["headword"] == "没" for item in hidden)
 
 
 def test_manual_grammar_override(client, db):

@@ -13,7 +13,7 @@
     </div><p id="question-pinyin" class="example-pinyin centered" hidden>{{ plan.pinyin }}</p>{% endif %}
     <p class="pattern-reminder">{{ point.pattern }}</p>
     {% if vocabulary %}<details class="vocab-help"><summary>Sentence vocabulary · {{ vocabulary|length }} word{{ '' if vocabulary|length == 1 else 's' }}</summary>
-      <p class="vocab-help-note">Open this whenever vocabulary gets in the way. Grammar is still what this exercise grades.</p>
+      <p class="vocab-help-note">Open this whenever vocabulary gets in the way. Grammar is still what this exercise grades.{% if plan.tested_markers %} Tested grammar is hidden from this helper: {{ plan.tested_markers|join(' / ') }}.{% endif %}</p>
       <div>{% for word in vocabulary %}<article class="vocab-help-word">
         <b>{{ word.headword }}</b><i>{{ word.pinyin }}</i><em>{{ word.gloss }}</em>
         <small class="{{ 'expected-known' if word.known else 'helper-word' }}">{{ 'Expected known' if word.known else 'Helper word' }} · HSK {{ word.hsk_bands }}</small>
