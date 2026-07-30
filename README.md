@@ -85,7 +85,11 @@ the current card.
 
 Theory and practice use separate saved example pools: at least five examples
 appear in each lesson guide and at least ten different examples are randomized
-in practice. Production grading normalizes punctuation and accepts known natural
+in practice. Exercises should require only the current lesson or earlier
+curriculum structures; later grammar is removed rather than silently required.
+AI review treats the current target as decisive but does not penalize a learner
+for omitting an unintroduced structure that appears only in the model answer.
+Production grading normalizes punctuation and accepts known natural
 variants such as `桌上` / `桌子上`. Rejected production answers show a character
 comparison and can be manually marked correct. Focused practice provides
 separate links back to its lesson or to the grammar index. The curriculum can be

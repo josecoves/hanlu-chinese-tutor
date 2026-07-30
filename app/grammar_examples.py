@@ -46,6 +46,29 @@ ANCHORS = {
 REQUIRE_ALL = {"因为所以", "从到结构", "转折复句", "虽然但是", "一边一边", "除了以外"}
 
 CURATED_EXAMPLE_SETS = {
+    "在和位置": {
+        "theory": [
+            ("妈妈在家。", "Mom is at home."),
+            ("我在学校学习。", "I study at school."),
+            ("爸爸在公司工作。", "Dad works at the company."),
+            ("书在桌子上。", "The book is on the table."),
+            ("他们在教室里。", "They are in the classroom."),
+        ],
+        "practice": [
+            ("我在家吃饭。", "I eat at home."),
+            ("她在学校学习。", "She studies at school."),
+            ("他在医院工作。", "He works at the hospital."),
+            ("老师在教室里。", "The teacher is in the classroom."),
+            ("我的书在桌上。", "My book is on the table."),
+            ("手机在书包里。", "The phone is in the schoolbag."),
+            ("我们在公园走路。", "We walk in the park."),
+            ("妈妈在商店买东西。", "Mom buys things at the shop."),
+            ("弟弟在房间里看书。", "My younger brother reads in his room."),
+            ("他们在饭店吃饭。", "They eat at the restaurant."),
+            ("我在地铁上听音乐。", "I listen to music on the metro."),
+            ("猫在桌子下。", "The cat is under the table."),
+        ],
+    },
     "的字短语": {
         "theory": [
             ("这是我的书。", "This is my book."),

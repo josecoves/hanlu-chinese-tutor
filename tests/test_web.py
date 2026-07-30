@@ -603,6 +603,36 @@ def test_possessive_de_lesson_uses_reviewed_attributive_examples(client, db):
     assert "He could pass the examination" not in page.text
 
 
+def test_location_lesson_uses_only_reviewed_basic_location_examples(client, db):
+    point = db.execute(
+        "SELECT id,theory_examples_json,practice_examples_json "
+        "FROM grammar_point WHERE title_zh='在和位置'"
+    ).fetchone()
+    theory = json.loads(point["theory_examples_json"])
+    practice = json.loads(point["practice_examples_json"])
+    all_examples = theory + practice
+    assert len(theory) == 5
+    assert len(practice) >= 10
+    assert {example["zh"] for example in theory}.isdisjoint(
+        {example["zh"] for example in practice}
+    )
+    assert all("在" in example["zh"] for example in all_examples)
+    assert all(
+        not any(
+            marker in example["zh"]
+            for marker in ("正在", "是你在", "我是在", "的吗", "能找到")
+        )
+        for example in all_examples
+    )
+    assert all(
+        example["source"] == "authored and reviewed"
+        for example in all_examples
+    )
+    page = client.get(f"/grammar/{point['id']}")
+    assert "我是在北京学习中文的" not in page.text
+    assert "我正在和朋友打电话呢" not in page.text
+
+
 def test_focused_grammar_practice_stays_on_lesson(client, db):
     point = db.execute(
         "SELECT id FROM grammar_point WHERE title_zh='有字句'"

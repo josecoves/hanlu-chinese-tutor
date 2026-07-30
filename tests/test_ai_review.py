@@ -1,4 +1,8 @@
-from app.ai_review import _estimated_cost, _parse_result
+from app.ai_review import (
+    GRAMMAR_REVIEW_SYSTEM_PROMPT,
+    _estimated_cost,
+    _parse_result,
+)
 
 
 def test_parse_result_handles_fenced_json_and_string_booleans():
@@ -35,3 +39,16 @@ def test_deepseek_flash_cost_uses_cache_and_output_rates():
     )
     assert values[:4] == (600, 100, 400, 200)
     assert values[4] == (400 * 0.0028 + 200 * 0.14 + 100 * 0.28) / 1_000_000
+
+
+def test_ai_prompt_respects_curriculum_order_and_target_grammar():
+    assert "current tested grammar pattern is decisive" in (
+        GRAMMAR_REVIEW_SYSTEM_PROMPT
+    )
+    assert "Never require a later or unintroduced structure" in (
+        GRAMMAR_REVIEW_SYSTEM_PROMPT
+    )
+    assert "他/她/它 mismatch" in GRAMMAR_REVIEW_SYSTEM_PROMPT
+    assert "我知道在哪里找到她 is natural without 能" in (
+        GRAMMAR_REVIEW_SYSTEM_PROMPT
+    )

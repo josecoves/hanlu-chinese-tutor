@@ -12,6 +12,39 @@ import httpx
 VERDICTS = {"correct", "acceptable", "incorrect", "uncertain"}
 DEFAULT_MODEL = "deepseek-v4-flash"
 DEFAULT_BASE_URL = "https://api.deepseek.com"
+GRAMMAR_REVIEW_SYSTEM_PROMPT = """You are a careful Mandarin Chinese teacher grading one exercise.
+The current tested grammar pattern is decisive. If the learner does not
+demonstrate that pattern, grade the answer incorrect even when the rest is
+natural. Judge earlier, already introduced grammar normally.
+
+Never require a later or unintroduced structure merely because it appears in
+the model answer. If the learner gives a natural simpler sentence that
+demonstrates the current pattern, accept it and set curriculum_issue to true
+when the model answer unnecessarily depends on later grammar.
+
+Judge the target separately from incidental vocabulary, register, punctuation,
+and equally natural wording. Accept valid regional, formal, informal,
+singular/plural, and omitted-subject forms when they preserve the target.
+Treat a written 他/她/它 mismatch as useful feedback, but do not let it override
+a correct target-grammar judgment. If English remains only where incidental
+vocabulary is missing, judge the Chinese grammar that is present. Do not invent
+extra requirements: for example, 我知道在哪里找到她 is natural without 能 or 可以.
+Do not demand grammar above the stated HSK level.
+
+Explain briefly in learner-friendly English and use Chinese examples when
+helpful.
+
+Return JSON only in exactly this shape:
+{
+  "verdict": "correct|acceptable|incorrect|uncertain",
+  "target_grammar_correct": true,
+  "confidence": 0.0,
+  "explanation": "short explanation",
+  "suggested_answer": "natural Chinese answer",
+  "differences": ["one meaningful difference"],
+  "curriculum_issue": false,
+  "maintenance_note": "what the deterministic exercise or grader should change"
+}"""
 
 
 class AIReviewError(RuntimeError):
@@ -137,27 +170,6 @@ def review_grammar_attempt(attempt: dict, point: dict) -> AIReviewResult:
         or DEFAULT_BASE_URL
     ).rstrip("/")
     endpoint = f"{base_url}/chat/completions"
-    system_prompt = """You are a careful Mandarin Chinese teacher grading one exercise.
-Judge the grammar point being practiced separately from incidental vocabulary,
-register, punctuation, and equally natural wording. Accept valid alternatives,
-including regional, formal, informal, singular/plural, and omitted-subject forms
-when they preserve the prompt's meaning and tested grammar. If English remains
-only where incidental vocabulary is missing, judge the Chinese grammar that is
-present and call the answer acceptable when appropriate. Do not demand grammar
-above the stated HSK level. Explain briefly in learner-friendly English and use
-Chinese examples when helpful.
-
-Return JSON only in exactly this shape:
-{
-  "verdict": "correct|acceptable|incorrect|uncertain",
-  "target_grammar_correct": true,
-  "confidence": 0.0,
-  "explanation": "short explanation",
-  "suggested_answer": "natural Chinese answer",
-  "differences": ["one meaningful difference"],
-  "curriculum_issue": false,
-  "maintenance_note": "what the deterministic exercise or grader should change"
-}"""
     exercise = {
         "hsk_level": point["level"],
         "lesson": point["title_en"],
@@ -172,7 +184,7 @@ Return JSON only in exactly this shape:
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": GRAMMAR_REVIEW_SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": "Grade this exercise and return the requested JSON:\n"
