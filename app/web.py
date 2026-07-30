@@ -1049,7 +1049,30 @@ def grammar_practice(request: Request, level: int = 0, grammar_id: int = 0,
         return render(request, "grammar_empty.html", level=level, scope=scope)
     practice_payload = point["practice_examples_json"] or "[]"
     examples = json.loads(practice_payload) or json.loads(point["examples_json"])
-    example = random.choice(examples)
+    previous_row = conn.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()
+    previous_plan = json.loads(previous_row["plan_json"]) if previous_row else {}
+    seen_by_grammar = previous_plan.get("seen_by_grammar", {})
+    previous_grammar_id = previous_plan.get("grammar_id")
+    previous_zh = previous_plan.get("zh")
+    if previous_grammar_id and previous_zh:
+        previous_key = str(previous_grammar_id)
+        previous_seen = seen_by_grammar.setdefault(previous_key, [])
+        if previous_zh not in previous_seen:
+            previous_seen.append(previous_zh)
+    grammar_key = str(point["id"])
+    seen = seen_by_grammar.get(grammar_key, [])
+    available = [
+        example for example in examples if example["zh"] not in set(seen)
+    ]
+    if not available:
+        seen = []
+        available = [
+            example for example in examples if example["zh"] != previous_zh
+        ] or examples
+    example = random.choice(available)
+    seen_by_grammar[grammar_key] = [*seen, example["zh"]]
     declared = conn.execute(
         "SELECT declared_hsk_band FROM learner WHERE id=1"
     ).fetchone()[0]
@@ -1082,7 +1105,7 @@ def grammar_practice(request: Request, level: int = 0, grammar_id: int = 0,
         "en": example["en"], "pinyin": sentence_pinyin(example["zh"]), "mode": mode,
         "ref": f"#G{point['id']}-{hashlib.sha1(example['zh'].encode()).hexdigest()[:6]}",
         "scope": scope, "focus_id": grammar_id, "requested_level": level,
-        "choices": choices,
+        "choices": choices, "seen_by_grammar": seen_by_grammar,
     }
     conn.execute(
         "INSERT INTO grammar_session(id,plan_json) VALUES(1,?) "

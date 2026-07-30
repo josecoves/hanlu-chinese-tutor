@@ -462,6 +462,31 @@ def test_focused_grammar_practice_stays_on_lesson(client, db):
     assert "Back to lesson" in answer.text
 
 
+def test_focused_grammar_practice_avoids_repeats_until_pool_is_used(client, db):
+    point = db.execute(
+        "SELECT id,practice_examples_json FROM grammar_point WHERE title_zh='有字句'"
+    ).fetchone()
+    examples = json.loads(point["practice_examples_json"])
+    served = []
+    for _ in range(len(examples)):
+        client.get(
+            f"/grammar/practice/card?grammar_id={point['id']}&mode=production"
+        )
+        plan = json.loads(db.execute(
+            "SELECT plan_json FROM grammar_session WHERE id=1"
+        ).fetchone()[0])
+        served.append(plan["zh"])
+    assert len(set(served)) == len(examples)
+
+    client.get(
+        f"/grammar/practice/card?grammar_id={point['id']}&mode=production"
+    )
+    next_plan = json.loads(db.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()[0])
+    assert next_plan["zh"] != served[-1]
+
+
 def test_natural_chinese_variant_is_accepted():
     kind, note = _grammar_match(
         "桌子上有一本书", "桌上有一本书。", "production"

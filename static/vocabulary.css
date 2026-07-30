@@ -127,20 +127,26 @@
   cursor: pointer;
 }
 .vocab-legend {
-  align-items: center;
   color: var(--muted);
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   font-size: 10px;
-  gap: 8px 22px;
-  margin: -5px 2px 12px;
+  gap: 7px;
+  margin: -3px 2px 14px;
 }
 .vocab-legend span {
   align-items: center;
   display: inline-flex;
-  gap: 5px;
+  gap: 7px;
+  line-height: 1.5;
 }
-.vocab-legend b { color: var(--ink); }
+.vocab-legend span + span {
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
+}
+.vocab-legend b {
+  color: var(--ink);
+  min-width: 52px;
+}
 .vocab-legend i {
   background: #eee9df;
   color: var(--coral);
