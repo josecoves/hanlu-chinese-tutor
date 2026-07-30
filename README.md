@@ -104,6 +104,13 @@ the progress export.
 .venv/bin/pytest
 ```
 
+## Hosted beta
+
+The `hosted/` directory contains a separate Cloudflare-compatible public
+curriculum preview with the full HSK 1–2 vocabulary, story library, and grammar
+curriculum. It does not upload or reuse the local learner database. Durable
+account-based progress will be added as a separate hosted capability.
+
 ## Content and progress
 
 The bundled vocabulary definitions come from the Complete HSK Vocabulary dataset
