@@ -1177,6 +1177,53 @@ def grammar_practice(request: Request, level: int = 0, grammar_id: int = 0,
                   ))
 
 
+def _next_grammar_card_url(plan: dict) -> str:
+    params = {"mode": plan.get("mode", "auto")}
+    if plan.get("focus_id"):
+        params["grammar_id"] = plan["focus_id"]
+    elif plan.get("scope") == "active":
+        params["scope"] = "active"
+        if plan.get("requested_level"):
+            params["level"] = plan["requested_level"]
+    else:
+        params["level"] = plan.get("requested_level") or plan.get("level", 1)
+    return f"/grammar/practice/card?{urlencode(params)}"
+
+
+@app.post("/grammar/session/skip-and-flag")
+def skip_and_flag_grammar_sentence(conn=Depends(get_conn)):
+    row = conn.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()
+    if not row:
+        return RedirectResponse("/grammar", 303)
+    plan = json.loads(row["plan_json"])
+    point = conn.execute(
+        "SELECT title_en FROM grammar_point WHERE id=?",
+        (plan["grammar_id"],),
+    ).fetchone()
+    if not point:
+        return RedirectResponse("/grammar", 303)
+    context = (
+        f"{plan['zh']} — {plan['en']} · {point['title_en']}"
+    )
+    note = (
+        "Skipped automatically: this sentence may be too advanced or may not "
+        "test the lesson's target grammar clearly."
+    )
+    conn.execute(
+        "INSERT INTO bug_report(ref,note,context,ts) "
+        "SELECT ?,?,?,? WHERE NOT EXISTS "
+        "(SELECT 1 FROM bug_report WHERE ref=? AND resolved=0)",
+        (
+            plan["ref"][:80], note, context[:1200],
+            datetime.now(timezone.utc).isoformat(), plan["ref"][:80],
+        ),
+    )
+    conn.commit()
+    return RedirectResponse(_next_grammar_card_url(plan), 303)
+
+
 def _normalize_answer(value: str) -> str:
     return re.sub(r"[\s。！？!?.,，'’\"“”]", "", value).lower()
 
@@ -1363,8 +1410,7 @@ def grammar_answer(request: Request, response: str = Form(""),
         (json.dumps(plan, ensure_ascii=False),),
     )
     conn.commit()
-    return render(request, "grammar_reveal.html", point=dict(point), plan=plan,
-                  examples=_grammar_examples(point), **reveal)
+    return RedirectResponse("/grammar-session/current", 303)
 
 
 @app.get("/grammar-session/current", response_class=HTMLResponse)

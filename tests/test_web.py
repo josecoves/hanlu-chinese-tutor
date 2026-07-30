@@ -349,6 +349,46 @@ def test_bug_report_non_js_fallback_resumes_exact_grammar_reveal(client, db):
     ).fetchone()[0] == attempts_before
 
 
+def test_skip_and_flag_grammar_sentence_moves_on_without_attempt(client, db):
+    point = db.execute(
+        "SELECT id FROM grammar_point WHERE title_zh='的字短语'"
+    ).fetchone()
+    client.get(
+        f"/grammar/practice/card?grammar_id={point['id']}&mode=production"
+    )
+    before = json.loads(db.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()[0])
+    attempts_before = db.execute(
+        "SELECT COUNT(*) FROM grammar_attempt"
+    ).fetchone()[0]
+    skipped = client.post(
+        "/grammar/session/skip-and-flag", follow_redirects=False
+    )
+    assert skipped.status_code == 303
+    assert (
+        skipped.headers["location"]
+        == f"/grammar/practice/card?mode=production&grammar_id={point['id']}"
+    )
+    assert db.execute(
+        "SELECT COUNT(*) FROM grammar_attempt"
+    ).fetchone()[0] == attempts_before
+    report = db.execute(
+        "SELECT ref,note,context FROM bug_report ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    assert report["ref"] == before["ref"]
+    assert "Skipped automatically" in report["note"]
+    assert before["zh"] in report["context"]
+
+    next_card = client.get(skipped.headers["location"])
+    assert next_card.status_code == 200
+    after = json.loads(db.execute(
+        "SELECT plan_json FROM grammar_session WHERE id=1"
+    ).fetchone()[0])
+    assert after["zh"] != before["zh"]
+    assert "Skip &amp; flag this sentence" in next_card.text
+
+
 def test_grammar_reference_and_comprehension_practice(client, db):
     page = client.get("/grammar")
     assert page.status_code == 200
@@ -364,6 +404,9 @@ def test_grammar_reference_and_comprehension_practice(client, db):
     practice = json.loads(example_sets["practice_examples_json"])
     assert len(theory) >= 5
     assert len(practice) >= 10
+    assert {example["zh"] for example in theory}.isdisjoint(
+        {example["zh"] for example in practice}
+    )
     assert {row["zh"] for row in theory}.isdisjoint(
         {row["zh"] for row in practice}
     )
@@ -405,6 +448,7 @@ def test_grammar_reference_and_comprehension_practice(client, db):
     ).fetchone()[0])
     answer = client.post("/grammar/answer", data={"response": plan["expected"]})
     assert answer.status_code == 200
+    assert answer.url.path == "/grammar-session/current"
     assert "Correct" in answer.text
     assert plan["zh"] in answer.text
     assert "Flag a problem with this card" in answer.text
@@ -514,6 +558,27 @@ def test_rich_grammar_guide_has_pinyin_audio_and_navigation(client, db):
     assert "HSK 2 · Lesson" in page.text
     assert "Phrase + 的: modifying or replacing a noun" in page.text
     assert "/static/grammar.js" in page.text
+
+
+def test_possessive_de_lesson_uses_reviewed_attributive_examples(client, db):
+    point = db.execute(
+        "SELECT id,theory_examples_json,practice_examples_json "
+        "FROM grammar_point WHERE title_zh='的字短语'"
+    ).fetchone()
+    theory = json.loads(point["theory_examples_json"])
+    practice = json.loads(point["practice_examples_json"])
+    all_examples = theory + practice
+    assert len(theory) >= 5
+    assert len(practice) >= 10
+    assert all(
+        example["zh"] != "他能过考试的，是不是？"
+        for example in all_examples
+    )
+    assert all(example["source"] == "authored and reviewed"
+               for example in all_examples)
+    page = client.get(f"/grammar/{point['id']}")
+    assert "那是老师的杯子。" in page.text
+    assert "He could pass the examination" not in page.text
 
 
 def test_focused_grammar_practice_stays_on_lesson(client, db):
@@ -800,3 +865,6 @@ def test_realtime_ai_review_repairs_score_and_tracks_cost(client, db, monkeypatc
     exported = client.get("/export/progress").json()
     assert exported["schema"] == 5
     assert exported["ai_usage"][0]["input_tokens"] == 600
+    script = client.get("/static/grammar.js").text
+    assert 'window.location.assign("/grammar-session/current")' in script
+    assert "window.location.reload()" not in script

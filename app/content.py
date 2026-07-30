@@ -301,6 +301,13 @@ def _apply_content_corrections(conn) -> None:
             "I was in hospital for a week.",
             "curated correction",
         ),
+        (
+            "考试",
+            "他能过考试的，是不是？",
+            "他能通过考试吗？",
+            "Can he pass the exam?",
+            "curated correction",
+        ),
     )
     for word, old_zh, zh, en, source in corrections:
         conn.execute(

@@ -141,7 +141,7 @@
       } else if (action === "request") {
         if (payload.status === "resolved") {
           if (state) state.textContent = "AI review ready";
-          window.location.reload();
+          window.location.assign("/grammar-session/current");
           return;
         }
         button.removeAttribute("data-request-ai-review");

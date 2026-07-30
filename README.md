@@ -77,6 +77,12 @@ leave the laptop and is processed by DeepSeek; all other practice remains
 local. Without a key or internet connection, the same button saves the attempt
 to the existing offline review queue.
 
+Grammar questions also provide **Skip & flag this sentence**. It creates a
+maintenance report, records no attempt or penalty, and immediately selects a
+different sentence from the same practice scope. The detailed report form
+remains available when the learner wants to explain a problem without leaving
+the current card.
+
 Theory and practice use separate saved example pools: at least five examples
 appear in each lesson guide and at least ten different examples are randomized
 in practice. Production grading normalizes punctuation and accepts known natural
@@ -164,3 +170,8 @@ source of copied lesson text or examples.
 This project is released under the [MIT License](LICENSE). Personal progress,
 the SQLite database, generated audio, build artifacts, virtual environments,
 and local secrets are excluded by `.gitignore`.
+
+To adapt the same local-first product for a different learner, start with the
+[Spanish tutor fork prompt](SPANISH_FORK_PROMPT.md). It preserves Hanlu's
+workflows while replacing Chinese-specific HSK, character, and pinyin concepts
+with a Spanish CEFR and morphology model.

@@ -46,6 +46,29 @@ ANCHORS = {
 REQUIRE_ALL = {"因为所以", "从到结构", "转折复句", "虽然但是", "一边一边", "除了以外"}
 
 CURATED_EXAMPLE_SETS = {
+    "的字短语": {
+        "theory": [
+            ("这是我的书。", "This is my book."),
+            ("她是我妈妈。", "She is my mother."),
+            ("那是老师的杯子。", "That is the teacher's cup."),
+            ("这是红色的杯子。", "This is a red cup."),
+            ("这是我朋友的猫。", "This is my friend's cat."),
+        ],
+        "practice": [
+            ("这是你的书。", "This is your book."),
+            ("那是他的手机。", "That is his phone."),
+            ("她是我的姐姐。", "She is my older sister."),
+            ("这是妈妈的茶。", "This is Mom's tea."),
+            ("老师的杯子在桌上。", "The teacher's cup is on the table."),
+            ("我的学校很大。", "My school is large."),
+            ("她喜欢红色的衣服。", "She likes red clothes."),
+            ("他是我哥哥的朋友。", "He is my older brother's friend."),
+            ("这是中国的茶。", "This is Chinese tea."),
+            ("那是妹妹的书包。", "That is my younger sister's schoolbag."),
+            ("我们的老师很好。", "Our teacher is very nice."),
+            ("这是一个很好的朋友。", "This is a very good friend."),
+        ],
+    },
     "不和没": {
         "theory": [
             ("我不喝咖啡。", "I do not drink coffee."),
