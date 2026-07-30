@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head"><span class="eyebrow">PATTERNS FOR REAL SENTENCES · 语法</span><div class="wip-line"><h1>Grammar</h1><span>HSK 1–2 complete · HSK 3 WIP</span></div><p>Learn one pattern, add it to your active practice, then mark it learned when it feels comfortable. Overall practice only draws from lessons marked practicing.</p>
+  <p class="recommended-note"><b>◆ Recommended early</b> marks high-frequency foundations that unlock many natural beginner sentences. It is guidance, not a required status or a shortcut past the lessons before it.</p>
   <div class="grammar-overview">
     <span><b data-status-count="not_started">{{ status_counts.not_started }}</b> new</span><span><b data-status-count="practicing">{{ status_counts.practicing }}</b> practicing</span><span><b data-status-count="learned">{{ status_counts.learned }}</b> learned</span>
     <a class="button primary" href="/grammar/practice/card?scope=active&mode=auto">Practice active lessons →</a>
@@ -22,9 +23,10 @@
       <div class="grammar-actions"><a href="/grammar/practice/card?scope=active&level={{ level }}&mode=comprehension">Practice active HSK {{ level }}</a></div>
     </div>
     <div class="grammar-grid">
-    {% for point in points %}<article class="grammar-tile" data-status="{{ point.status }}" data-level="{{ level }}" data-search="{{ point.title_zh }} {{ point.title_en|lower }} {{ point.pattern|lower }}">
+    {% for point in points %}<article class="grammar-tile {{ 'recommended' if point.recommended_early else '' }}" data-status="{{ point.status }}" data-level="{{ level }}" data-search="{{ point.title_zh }} {{ point.title_en|lower }} {{ point.pattern|lower }}">
       <a href="/grammar/{{ point.id }}">
         <div><span>HSK {{ level }} · LESSON {{ point.lesson_number }}</span><span class="open-lesson">Open lesson →</span></div>
+        {% if point.recommended_early %}<b class="recommended-badge">◆ Recommended early</b>{% endif %}
         <h3>{{ point.title_zh }}</h3><p>{{ point.title_en }}</p><code>{{ point.pattern }}</code>
         {% if point.attempts %}<small>{{ (point.correct / point.attempts * 100)|round|int }}% correct · {{ point.attempts }} attempt{{ '' if point.attempts == 1 else 's' }}</small>{% endif %}
       </a>

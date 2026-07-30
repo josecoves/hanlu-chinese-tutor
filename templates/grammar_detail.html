@@ -4,7 +4,8 @@
 {% block content %}
 <section class="grammar-detail">
   <a href="/grammar">← Grammar</a>
-  <div class="grammar-title"><span class="hsk-badge">HSK {{ point.level }} · Lesson {{ lesson_number }} of {{ lesson_total }}</span><span data-status-badge class="lesson-status {{ status }}">{{ 'new' if status == 'not_started' else status|replace('_',' ') }}</span><h1>{{ point.title_zh }}</h1><h2>{{ point.title_en }}</h2></div>
+  <div class="grammar-title"><span class="hsk-badge">HSK {{ point.level }} · Lesson {{ lesson_number }} of {{ lesson_total }}</span><span data-status-badge class="lesson-status {{ status }}">{{ 'new' if status == 'not_started' else status|replace('_',' ') }}</span>{% if point.recommended_early %}<span class="recommended-badge detail">◆ Recommended early</span>{% endif %}<h1>{{ point.title_zh }}</h1><h2>{{ point.title_en }}</h2></div>
+  {% if point.recommended_early %}<p class="recommended-detail">This high-frequency foundation unlocks many later examples. Learning it early is useful, but you can still follow the curriculum at your own pace.</p>{% endif %}
   <div class="pattern">{{ point.pattern }}</div>
   <section class="theory-guide">
     <span class="eyebrow">LESSON GUIDE · 理论</span>

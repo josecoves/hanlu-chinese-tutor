@@ -87,6 +87,10 @@ Theory and practice use separate saved example pools: at least five examples
 appear in each lesson guide and at least ten different examples are randomized
 in practice. Exercises should require only the current lesson or earlier
 curriculum structures; later grammar is removed rather than silently required.
+Generated examples are tagged with detected grammar dependencies and filtered
+against lesson order without deleting them from the shared sentence library.
+High-frequency foundations carry a `Recommended early` badge, while later
+structures such as `是…的`, `把`, and `被` remain in their proper lessons.
 AI review treats the current target as decisive but does not penalize a learner
 for omitting an unintroduced structure that appears only in the model answer.
 Production grading normalizes punctuation and accepts known natural

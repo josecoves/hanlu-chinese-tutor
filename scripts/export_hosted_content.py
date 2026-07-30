@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.config import DB_PATH
 from app.db import connect
+from app.grammar_curriculum import RECOMMENDED_EARLY
 
 
 OUTPUT = Path(__file__).resolve().parents[1] / "hosted" / "app" / "hanlu-data.json"
@@ -56,6 +57,7 @@ def main() -> None:
             "titleEn": row["title_en"],
             "pattern": row["pattern"],
             "explanation": row["explanation"],
+            "recommendedEarly": row["title_zh"] in RECOMMENDED_EARLY,
             "examples": [
                 {
                     "zh": example["zh"],

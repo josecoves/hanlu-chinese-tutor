@@ -24,6 +24,7 @@ type Grammar = {
   titleEn: string;
   pattern: string;
   explanation: string;
+  recommendedEarly: boolean;
   examples: Array<{ zh: string; en: string }>;
 };
 type Content = { words: Word[]; stories: Story[]; grammar: Grammar[] };
@@ -393,6 +394,7 @@ function GrammarLibrary({
       <section className="grammar-detail">
         <button className="back" onClick={() => setSelectedId(null)}>← Grammar library</button>
         <span className="eyebrow">HSK {selected.level} · GRAMMAR LESSON</span>
+        {selected.recommendedEarly && <span className="recommended-chip">◆ Recommended early</span>}
         <h1>{selected.titleEn}</h1><h2>{selected.titleZh}</h2>
         <div className="pattern"><span>STRUCTURE</span><strong>{selected.pattern}</strong></div>
         <p className="explanation">{selected.explanation}</p>
@@ -413,7 +415,7 @@ function GrammarLibrary({
       <div className="grammar-grid">
         {filtered.map((lesson, index) => (
           <button key={lesson.id} onClick={() => setSelectedId(lesson.id)}>
-            <span>LESSON {String(index + 1).padStart(2, "0")}</span><strong>{lesson.titleEn}</strong><em>{lesson.titleZh}</em><code>{lesson.pattern}</code>
+            <span>LESSON {String(index + 1).padStart(2, "0")}</span>{lesson.recommendedEarly && <b className="recommended-chip">◆ Recommended early</b>}<strong>{lesson.titleEn}</strong><em>{lesson.titleZh}</em><code>{lesson.pattern}</code>
           </button>
         ))}
       </div>
@@ -438,7 +440,7 @@ function Settings() {
         <article><b>Hosted curriculum</b><span>1,261 words · 12 stories · 90 grammar lessons</span></article>
         <article><b>Audio</b><span>Uses Mandarin speech available on the current device.</span></article>
         <article><b>Offline learning data</b><span>Remains on your laptop and is never uploaded.</span></article>
-        <article><b>Open source</b><a href="https://github.com/josecoves/hanlu-chinese-tutor" target="_blank" rel="noreferrer">View the private repository when authorized ↗</a></article>
+        <article><b>Open source</b><a href="https://github.com/josecoves/hanlu-chinese-tutor" target="_blank" rel="noreferrer">View source on GitHub ↗</a></article>
       </div>
     </section>
   );

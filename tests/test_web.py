@@ -416,6 +416,8 @@ def test_grammar_reference_and_comprehension_practice(client, db):
     assert page.status_code == 200
     assert "Identifying with" in page.text
     assert "48 lessons in the curriculum" in page.text
+    assert "Recommended early" in page.text
+    assert "high-frequency foundations" in page.text
     assert db.execute("SELECT COUNT(*) FROM grammar_point WHERE level=1").fetchone()[0] == 48
     assert db.execute("SELECT COUNT(*) FROM grammar_point WHERE level=2").fetchone()[0] == 36
     example_sets = db.execute(
@@ -475,6 +477,20 @@ def test_grammar_reference_and_comprehension_practice(client, db):
     assert plan["zh"] in answer.text
     assert "Flag a problem with this card" in answer.text
     assert db.execute("SELECT COUNT(*) FROM grammar_attempt").fetchone()[0] == 1
+
+
+def test_recommended_early_badge_appears_only_on_selected_lessons(client, db):
+    location_id = db.execute(
+        "SELECT id FROM grammar_point WHERE title_zh='在和位置'"
+    ).fetchone()[0]
+    emphasis_id = db.execute(
+        "SELECT id FROM grammar_point WHERE title_zh='是的强调句'"
+    ).fetchone()[0]
+    location = client.get(f"/grammar/{location_id}")
+    emphasis = client.get(f"/grammar/{emphasis_id}")
+    assert "Recommended early" in location.text
+    assert "unlocks many later examples" in location.text
+    assert "Recommended early" not in emphasis.text
 
 
 def test_grammar_lifecycle_and_practice_scope(client, db):

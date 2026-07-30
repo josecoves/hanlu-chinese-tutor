@@ -178,7 +178,7 @@ GRAMMAR_POINTS = [
            ("银行在学校对面。", "The bank is across from the school."), ("请坐在我右边。", "Please sit to my right.")),
     lesson(2, "动词重叠", "Reduplicating verbs", "V-V / V一V / ABAB",
            "Reduplication presents a short, light, or tentative action and often softens a request.",
-           ("让我看看。", "Let me take a look."), ("我们讨论讨论这个问题。", "Let’s discuss this issue a little.")),
+           ("我看看这本书。", "I will take a look at this book."), ("我们讨论讨论这个问题。", "Let’s discuss this issue a little.")),
     lesson(2, "形容词重叠", "Reduplicating adjectives", "AA的 / AABB的",
            "A reduplicated adjective makes a description vivid and usually takes 的 before a noun.",
            ("她有一双大大的眼睛。", "She has a pair of big eyes."), ("房间干干净净的。", "The room is nice and clean.")),
@@ -187,7 +187,7 @@ GRAMMAR_POINTS = [
            ("他可能迟到。", "He might be late."), ("明天可能下雨。", "It may rain tomorrow.")),
     lesson(2, "离合词", "Separable verbs", "verb part + modifier/object + noun part",
            "Some two-character verbs can separate so that quantity, aspect, or another modifier appears between the parts.",
-           ("我昨天见了他一面。", "I met him once yesterday."), ("她每天睡八个小时的觉。", "She sleeps eight hours every day.")),
+           ("我昨天见了他一面。", "I met him once yesterday."), ("她今天睡了一个午觉。", "She took a nap today.")),
     lesson(2, "自己", "Reflexive 自己", "subject/person + 自己",
            "自己 refers back to the relevant person and can emphasize doing something without help.",
            ("我自己做饭。", "I cook for myself."), ("他相信自己。", "He believes in himself.")),
@@ -211,7 +211,7 @@ GRAMMAR_POINTS = [
            ("我六点就起床了。", "I got up as early as six."), ("你到了就给我打电话。", "Call me as soon as you arrive.")),
     lesson(2, "多问程度", "Asking degree with 多", "多 + adjective？",
            "多 before an adjective asks for a measurable degree such as age, distance, height, or duration.",
-           ("你妹妹多大？", "How old is your younger sister?"), ("学校离这儿多远？", "How far is the school from here?")),
+           ("你妹妹多大？", "How old is your younger sister?"), ("这座楼多高？", "How tall is this building?")),
     lesson(2, "一点儿和有点儿", "A little: 一点儿 vs 有点儿", "adjective + 一点儿 · 有点儿 + adjective",
            "一点儿 after an adjective requests a small change; 有点儿 before it often presents a mildly unwanted quality.",
            ("请说慢一点儿。", "Please speak a little more slowly."), ("今天有点儿冷。", "It is a little cold today.")),
@@ -288,12 +288,21 @@ GRAMMAR_POINTS = [
 def seed_grammar(conn) -> None:
     """Insert new lessons and refresh teaching copy without changing existing IDs."""
     corpus = corpus_for_seed(conn)
+    level_numbers: dict[int, int] = {}
+    curriculum_order: dict[str, tuple[int, int]] = {}
+    for level, zh, *_rest in GRAMMAR_POINTS:
+        level_numbers[level] = level_numbers.get(level, 0) + 1
+        curriculum_order[zh] = (level, level_numbers[level])
+    level_numbers.clear()
     for level, zh, en, pattern, explanation, examples in GRAMMAR_POINTS:
+        level_numbers[level] = level_numbers.get(level, 0) + 1
         base_examples = [{"zh": example_zh, "en": example_en}
                          for example_zh, example_en in examples]
         point = {
             "level": level, "title_zh": zh, "title_en": en,
             "pattern": pattern, "explanation": explanation,
+            "lesson_number": level_numbers[level],
+            "curriculum_order": curriculum_order,
         }
         theory_examples, practice_examples = build_example_sets(
             conn, point, base_examples, corpus

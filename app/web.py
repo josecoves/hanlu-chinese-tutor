@@ -27,6 +27,7 @@ from .grammar_theory import build_guide
 from .seed import apply_declaration
 from .segment import segment
 from .grammar import seed_grammar
+from .grammar_curriculum import RECOMMENDED_EARLY
 from .grammar_examples import ANCHORS
 from .tts import synthesize
 
@@ -988,6 +989,7 @@ def grammar_page(request: Request, conn=Depends(get_conn)):
     for level_points in levels.values():
         for lesson_number, point in enumerate(level_points, 1):
             point["lesson_number"] = lesson_number
+            point["recommended_early"] = point["title_zh"] in RECOMMENDED_EARLY
     learner_band = conn.execute(
         "SELECT declared_hsk_band FROM learner WHERE id=1"
     ).fetchone()[0]
@@ -1025,6 +1027,7 @@ def grammar_detail(request: Request, grammar_id: int, conn=Depends(get_conn)):
         "FROM grammar_attempt WHERE user_id=1 AND grammar_id=?", (grammar_id,)
     ).fetchone()
     point = dict(row)
+    point["recommended_early"] = point["title_zh"] in RECOMMENDED_EARLY
     level_ids = [item["id"] for item in conn.execute(
         "SELECT id FROM grammar_point WHERE level=? ORDER BY id", (point["level"],)
     )]
