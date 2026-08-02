@@ -952,7 +952,8 @@ def _sync_grammar_status_from_attempts(conn, grammar_id: int) -> str:
         return state["status"]
     stats = conn.execute(
         "SELECT COUNT(*) attempts,COALESCE(SUM(correct),0) correct "
-        "FROM grammar_attempt WHERE user_id=1 AND grammar_id=?",
+        "FROM grammar_attempt WHERE user_id=1 AND grammar_id=? "
+        "AND match_kind<>'curriculum_void'",
         (grammar_id,),
     ).fetchone()
     if not stats["attempts"]:
@@ -980,6 +981,7 @@ def grammar_page(request: Request, conn=Depends(get_conn)):
         "SELECT gp.*,COUNT(ga.id) attempts,COALESCE(SUM(ga.correct),0) correct,"
         "COALESCE(gs.status,'not_started') status FROM grammar_point gp "
         "LEFT JOIN grammar_attempt ga ON ga.grammar_id=gp.id AND ga.user_id=1 "
+        "AND ga.match_kind<>'curriculum_void' "
         "LEFT JOIN grammar_state gs ON gs.grammar_id=gp.id AND gs.user_id=1 "
         "GROUP BY gp.id,gs.status ORDER BY gp.level,gp.id"
     ):
@@ -1024,7 +1026,8 @@ def grammar_detail(request: Request, grammar_id: int, conn=Depends(get_conn)):
     ).fetchone()
     attempts = conn.execute(
         "SELECT COUNT(*) attempts,COALESCE(SUM(correct),0) correct "
-        "FROM grammar_attempt WHERE user_id=1 AND grammar_id=?", (grammar_id,)
+        "FROM grammar_attempt WHERE user_id=1 AND grammar_id=? "
+        "AND match_kind<>'curriculum_void'", (grammar_id,)
     ).fetchone()
     point = dict(row)
     point["recommended_early"] = point["title_zh"] in RECOMMENDED_EARLY
@@ -1387,7 +1390,8 @@ def grammar_answer(request: Request, response: str = Form(""),
     ).fetchone()
     stats = conn.execute(
         "SELECT COUNT(*) attempts,COALESCE(SUM(correct),0) correct "
-        "FROM grammar_attempt WHERE user_id=1 AND grammar_id=?",
+        "FROM grammar_attempt WHERE user_id=1 AND grammar_id=? "
+        "AND match_kind<>'curriculum_void'",
         (plan["grammar_id"],),
     ).fetchone()
     ready_to_learn = (

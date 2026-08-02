@@ -17,6 +17,12 @@ The current tested grammar pattern is decisive. If the learner does not
 demonstrate that pattern, grade the answer incorrect even when the rest is
 natural. Judge earlier, already introduced grammar normally.
 
+First check whether the model answer itself clearly demonstrates the tested
+pattern. If it does not, set curriculum_issue to true. In that situation do
+not penalize the learner merely for also omitting the pattern; judge whether
+their Chinese is a reasonable translation and use uncertain rather than
+incorrect when the broken exercise prevents a fair target-grammar judgment.
+
 Never require a later or unintroduced structure merely because it appears in
 the model answer. If the learner gives a natural simpler sentence that
 demonstrates the current pattern, accept it and set curriculum_issue to true
@@ -25,6 +31,11 @@ when the model answer unnecessarily depends on later grammar.
 Judge the target separately from incidental vocabulary, register, punctuation,
 and equally natural wording. Accept valid regional, formal, informal,
 singular/plural, and omitted-subject forms when they preserve the target.
+Accept a natural near-synonym for incidental vocabulary when it preserves the
+prompt's practical meaning and does not replace the grammar being tested. Give
+the more precise model wording as feedback, but do not call that vocabulary
+choice a grammar error. For example, a reasonable class/school or work/job
+wording difference is feedback unless that distinction is the lesson target.
 Treat a written 他/她/它 mismatch as useful feedback, but do not let it override
 a correct target-grammar judgment. If English remains only where incidental
 vocabulary is missing, judge the Chinese grammar that is present. Do not invent

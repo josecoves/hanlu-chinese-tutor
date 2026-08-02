@@ -144,7 +144,7 @@ GUIDES = {
         ),
         "notes": ("Common results include 完, 好, 到, 懂, 见, 对, and 错.", "The object follows the complete verb-result unit."),
         "pitfall": "Do not place 了 between the action and its result. Keep the combination together, such as 看完 or 听懂.",
-        "extra_examples": (("我终于找到了钥匙。", "I finally found the key."), ("对不起，我没听清楚。", "Sorry, I did not hear clearly.")),
+        "extra_examples": (("我找到了那本书。", "I found that book."), ("对不起，我没听清楚。", "Sorry, I did not hear clearly.")),
     },
     "趋向补语": {
         "intro": (

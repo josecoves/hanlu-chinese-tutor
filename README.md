@@ -168,10 +168,11 @@ notes correct ambiguous cases such as `开学` and `院`. MDBG links provide a
 convenient external cross-check. Topic labels and the personal progress
 export came from the files supplied for this reconstruction. Context sentences sourced
 from Tatoeba are marked `Tatoeba (CC BY 2.0)` in the local database. Runtime use is
-offline. Grammar explanations and examples are original to this project; the curriculum
-scope follows the published GF 0025–2021 grammar outline. Chinese Grammar Wiki
-was used as a structural reference for organizing multi-case lessons, not as a
-source of copied lesson text or examples.
+offline. The grammar scope follows the published GF 0025–2021 outline and uses
+lesson organization, structures, and adapted example families from AllSet
+Learning's Chinese Grammar Wiki. See
+[`content/ALLSET_ATTRIBUTION.md`](content/ALLSET_ATTRIBUTION.md) for source links
+and the separate content-license terms.
 
 ## Publishing to GitHub
 

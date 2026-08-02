@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import argparse
+import re
 
 from app.config import DB_PATH
 from app.db import connect
 from app.grammar import GRAMMAR_POINTS
 from app.grammar_curriculum import future_dependencies
-from app.grammar_examples import _matches
+from app.grammar_examples import GENERAL_STRUCTURE_LESSONS, _matches, vocabulary_profile
 
 
 def curriculum_order() -> dict[str, tuple[int, int]]:
@@ -21,8 +23,21 @@ def curriculum_order() -> dict[str, tuple[int, int]]:
 
 
 def main() -> None:
-    conn = connect(DB_PATH)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--db", default=str(DB_PATH))
+    args = parser.parse_args()
+    conn = connect(args.db)
     order = curriculum_order()
+    bands = {}
+    for item in conn.execute(
+        "SELECT headword,hsk_bands FROM item WHERE kind='word'"
+    ):
+        levels = [
+            int(value) for value in item["hsk_bands"].split(",")
+            if value.isdigit()
+        ]
+        if levels:
+            bands[item["headword"]] = min(levels)
     failures = []
     lesson_count = 0
     practice_count = 0
@@ -48,11 +63,38 @@ def main() -> None:
             failures.append(f"{row['title_zh']}: fewer than 10 practice examples")
         if theory_zh & practice_zh:
             failures.append(f"{row['title_zh']}: theory/practice duplicate")
-        if sum(_matches(row["title_zh"], item["zh"]) for item in practice) < 10:
-            failures.append(f"{row['title_zh']}: fewer than 10 targeted examples")
+        for example in practice:
+            if not _matches(row["title_zh"], example["zh"]):
+                failures.append(
+                    f"{row['title_zh']} practice is not targeted: {example['zh']}"
+                )
+        if row["title_zh"] not in GENERAL_STRUCTURE_LESSONS:
+            for example in theory:
+                if not _matches(row["title_zh"], example["zh"]):
+                    failures.append(
+                        f"{row['title_zh']} theory is not targeted: {example['zh']}"
+                    )
 
         for pool_name, examples in (("theory", theory), ("practice", practice)):
             for example in examples:
+                hanzi_count = len(re.findall(r"[\u3400-\u9fff]", example["zh"]))
+                length_limit = 16 if row["level"] == 1 else 22
+                if hanzi_count > length_limit:
+                    failures.append(
+                        f"{row['title_zh']} {pool_name} is too long: {example['zh']}"
+                    )
+                vocab_level, unknown = vocabulary_profile(example["zh"], bands)
+                if vocab_level > min(3, row["level"] + 1):
+                    failures.append(
+                        f"{row['title_zh']} {pool_name} uses HSK {vocab_level} "
+                        f"vocabulary: {example['zh']}"
+                    )
+                unknown_limit = 3 if row["level"] <= 2 else 4
+                if unknown > unknown_limit:
+                    failures.append(
+                        f"{row['title_zh']} {pool_name} has {unknown} unknown "
+                        f"characters: {example['zh']}"
+                    )
                 future = future_dependencies(example["zh"], point, order)
                 if future:
                     failures.append(

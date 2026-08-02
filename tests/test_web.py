@@ -2,6 +2,7 @@ import json
 import app.web as web_module
 from app.ai_review import AIReviewResult
 from app.content import _apply_story_corrections
+from app.grammar_examples import GRAMMAR_WIKI_ADAPTED_SOURCE
 from app.web import _grammar_match, _grammar_vocabulary, _known_headwords
 
 
@@ -612,7 +613,7 @@ def test_possessive_de_lesson_uses_reviewed_attributive_examples(client, db):
         example["zh"] != "他能过考试的，是不是？"
         for example in all_examples
     )
-    assert all(example["source"] == "authored and reviewed"
+    assert all(example["source"] == GRAMMAR_WIKI_ADAPTED_SOURCE
                for example in all_examples)
     page = client.get(f"/grammar/{point['id']}")
     assert "那是老师的杯子。" in page.text
@@ -641,7 +642,7 @@ def test_location_lesson_uses_only_reviewed_basic_location_examples(client, db):
         for example in all_examples
     )
     assert all(
-        example["source"] == "authored and reviewed"
+        example["source"] == GRAMMAR_WIKI_ADAPTED_SOURCE
         for example in all_examples
     )
     page = client.get(f"/grammar/{point['id']}")
