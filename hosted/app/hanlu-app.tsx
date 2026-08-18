@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Word = {
   id: number;
@@ -28,6 +28,14 @@ type Grammar = {
   examples: Array<{ zh: string; en: string }>;
 };
 type Content = { words: Word[]; stories: Story[]; grammar: Grammar[] };
+type StoryProgress = { sentenceIndex: number; completedAt?: string };
+type GrammarStatus = "new" | "practicing" | "learned";
+type CloudProgress = {
+  version: 1;
+  stories: Record<string, StoryProgress>;
+  grammar: Record<string, GrammarStatus>;
+};
+type SyncState = "loading" | "saved" | "offline";
 type Tab =
   | "Today"
   | "Vocabulary"
@@ -65,6 +73,51 @@ export function HanluApp({ content }: { content: Content }) {
   const [showPinyin, setShowPinyin] = useState(true);
   const [showTranslation, setShowTranslation] = useState(false);
   const [grammarId, setGrammarId] = useState<number | null>(null);
+  const [progress, setProgress] = useState<CloudProgress>({
+    version: 1,
+    stories: {},
+    grammar: {},
+  });
+  const [syncState, setSyncState] = useState<SyncState>("loading");
+  const [progressLoaded, setProgressLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/progress", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Progress is unavailable");
+        return response.json() as Promise<{ progress: CloudProgress }>;
+      })
+      .then(({ progress: remoteProgress }) => {
+        if (cancelled) return;
+        if (remoteProgress?.version === 1) setProgress(remoteProgress);
+        setSyncState("saved");
+      })
+      .catch(() => {
+        if (!cancelled) setSyncState("offline");
+      })
+      .finally(() => {
+        if (!cancelled) setProgressLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!progressLoaded) return;
+    const timeout = window.setTimeout(() => {
+      void fetch("/api/progress", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(progress),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error("Progress save failed");
+          setSyncState("saved");
+        })
+        .catch(() => setSyncState("offline"));
+    }, 500);
+    return () => window.clearTimeout(timeout);
+  }, [progress, progressLoaded]);
 
   const topics = useMemo(() => {
     const grouped = new Map<string, { one: number; two: number }>();
@@ -104,9 +157,29 @@ export function HanluApp({ content }: { content: Content }) {
 
   const openStory = (id: number) => {
     setStoryId(id);
-    setSentenceIndex(0);
+    setSentenceIndex(progress.stories[String(id)]?.sentenceIndex ?? 0);
     setShowPinyin(true);
     setShowTranslation(false);
+  };
+
+  const updateStoryProgress = (id: number, index: number, total: number) => {
+    setProgress((current) => ({
+      ...current,
+      stories: {
+        ...current.stories,
+        [id]: {
+          sentenceIndex: index,
+          ...(index >= total - 1 ? { completedAt: new Date().toISOString() } : {}),
+        },
+      },
+    }));
+  };
+
+  const updateGrammarStatus = (id: number, status: GrammarStatus) => {
+    setProgress((current) => ({
+      ...current,
+      grammar: { ...current.grammar, [id]: status },
+    }));
   };
 
   return (
@@ -158,13 +231,20 @@ export function HanluApp({ content }: { content: Content }) {
             stories={content.stories}
             storyId={storyId}
             sentenceIndex={sentenceIndex}
-            setSentenceIndex={setSentenceIndex}
+            setSentenceIndex={(index) => {
+              setSentenceIndex(index);
+              if (storyId !== null) {
+                const story = content.stories.find((item) => item.id === storyId);
+                if (story) updateStoryProgress(storyId, index, story.sentences.length);
+              }
+            }}
             openStory={openStory}
             closeStory={() => setStoryId(null)}
             showPinyin={showPinyin}
             setShowPinyin={setShowPinyin}
             showTranslation={showTranslation}
             setShowTranslation={setShowTranslation}
+            progress={progress.stories}
           />
         )}
         {tab === "Grammar" && (
@@ -172,14 +252,16 @@ export function HanluApp({ content }: { content: Content }) {
             lessons={content.grammar}
             selectedId={grammarId}
             setSelectedId={setGrammarId}
+            statuses={progress.grammar}
+            setStatus={updateGrammarStatus}
           />
         )}
-        {tab === "Progress" && <Progress />}
-        {tab === "Settings" && <Settings />}
+        {tab === "Progress" && <Progress content={content} progress={progress} syncState={syncState} />}
+        {tab === "Settings" && <Settings syncState={syncState} />}
       </main>
 
       <footer>
-        <span>汉路 hosted beta · public curriculum preview</span>
+        <span>汉路 private hosted beta · {syncState === "saved" ? "progress synced" : syncState === "loading" ? "syncing progress" : "progress will retry when online"}</span>
         <a
           href="https://github.com/josecoves/hanlu-chinese-tutor"
           target="_blank"
@@ -327,6 +409,7 @@ function Stories({
   setShowPinyin,
   showTranslation,
   setShowTranslation,
+  progress,
 }: {
   stories: Story[];
   storyId: number | null;
@@ -338,6 +421,7 @@ function Stories({
   setShowPinyin: (value: boolean) => void;
   showTranslation: boolean;
   setShowTranslation: (value: boolean) => void;
+  progress: Record<string, StoryProgress>;
 }) {
   const story = stories.find((item) => item.id === storyId);
   if (!story) {
@@ -347,7 +431,7 @@ function Stories({
         <div className="story-grid">
           {stories.map((item, index) => (
             <button key={item.id} onClick={() => openStory(item.id)}>
-              <span>STORY {String(index + 1).padStart(2, "0")} · 8 SENTENCES</span>
+              <span>{storyProgressLabel(index + 1, item, progress[String(item.id)])}</span>
               <strong>{item.titleZh}</strong><em>{item.titleEn}</em><b>Start reading →</b>
             </button>
           ))}
@@ -382,10 +466,14 @@ function GrammarLibrary({
   lessons,
   selectedId,
   setSelectedId,
+  statuses,
+  setStatus,
 }: {
   lessons: Grammar[];
   selectedId: number | null;
   setSelectedId: (id: number | null) => void;
+  statuses: Record<string, GrammarStatus>;
+  setStatus: (id: number, status: GrammarStatus) => void;
 }) {
   const [level, setLevel] = useState(1);
   const selected = lessons.find((lesson) => lesson.id === selectedId);
@@ -397,6 +485,16 @@ function GrammarLibrary({
         {selected.recommendedEarly && <span className="recommended-chip">◆ Recommended early</span>}
         <h1>{selected.titleEn}</h1><h2>{selected.titleZh}</h2>
         <div className="pattern"><span>STRUCTURE</span><strong>{selected.pattern}</strong></div>
+        <label className="lesson-status">Learning status
+          <select
+            value={statuses[String(selected.id)] ?? "new"}
+            onChange={(event) => setStatus(selected.id, event.target.value as GrammarStatus)}
+          >
+            <option value="new">New</option>
+            <option value="practicing">Practicing</option>
+            <option value="learned">Learned</option>
+          </select>
+        </label>
         <p className="explanation">{selected.explanation}</p>
         <h3>Worked examples</h3>
         <div className="examples">
@@ -415,7 +513,7 @@ function GrammarLibrary({
       <div className="grammar-grid">
         {filtered.map((lesson, index) => (
           <button key={lesson.id} onClick={() => setSelectedId(lesson.id)}>
-            <span>LESSON {String(index + 1).padStart(2, "0")}</span>{lesson.recommendedEarly && <b className="recommended-chip">◆ Recommended early</b>}<strong>{lesson.titleEn}</strong><em>{lesson.titleZh}</em><code>{lesson.pattern}</code>
+            <span>LESSON {String(index + 1).padStart(2, "0")} · {grammarStatusLabel(statuses[String(lesson.id)] ?? "new")}</span>{lesson.recommendedEarly && <b className="recommended-chip">◆ Recommended early</b>}<strong>{lesson.titleEn}</strong><em>{lesson.titleZh}</em><code>{lesson.pattern}</code>
           </button>
         ))}
       </div>
@@ -423,27 +521,62 @@ function GrammarLibrary({
   );
 }
 
-function Progress() {
+function Progress({
+  content,
+  progress,
+  syncState,
+}: {
+  content: Content;
+  progress: CloudProgress;
+  syncState: SyncState;
+}) {
+  const completedStories = content.stories.filter(
+    (story) => progress.stories[String(story.id)]?.completedAt,
+  ).length;
+  const practicingGrammar = Object.values(progress.grammar).filter(
+    (status) => status === "practicing",
+  ).length;
+  const learnedGrammar = Object.values(progress.grammar).filter(
+    (status) => status === "learned",
+  ).length;
   return (
     <section className="page narrow">
-      <PageHead eyebrow="HOSTED BETA" title="Progress" text="Your existing progress remains private and safe in the offline app." />
-      <div className="notice-card"><span>COMING NEXT</span><h2>Personal accounts and synced learning progress</h2><p>The first hosted release focuses on making the complete curriculum available online. Account-based review history, story completion, and grammar mastery will be added before public learning data is enabled.</p><strong>No visitor shares another person’s progress.</strong></div>
+      <PageHead eyebrow="PRIVATE CLOUD PROGRESS" title="Progress" text="Story reading and grammar-study status follow you between signed-in devices." />
+      <div className="progress-grid">
+        <article><span>Stories completed</span><strong>{completedStories} / {content.stories.length}</strong></article>
+        <article><span>Grammar in progress</span><strong>{practicingGrammar}</strong></article>
+        <article><span>Grammar learned</span><strong>{learnedGrammar}</strong></article>
+      </div>
+      <div className="notice-card"><span>{syncState === "saved" ? "SAVED PRIVATELY" : "WAITING FOR CONNECTION"}</span><h2>{syncState === "saved" ? "Your progress is synced." : "Your progress will retry when you are online."}</h2><p>The original local tutor remains unchanged and private on this laptop. Its existing FSRS review history will be migrated only after an explicit import step, so nothing is overwritten.</p><strong>AI reviews, full spaced repetition, and offline queued edits are the next sync milestone.</strong></div>
     </section>
   );
 }
 
-function Settings() {
+function Settings({ syncState }: { syncState: SyncState }) {
   return (
     <section className="page narrow">
-      <PageHead eyebrow="ABOUT THIS BUILD" title="Settings" text="The hosted beta and offline tutor are intentionally separate for now." />
+      <PageHead eyebrow="ABOUT THIS BUILD" title="Settings" text="A private hosted companion to the local Hanlu tutor." />
       <div className="settings-list">
         <article><b>Hosted curriculum</b><span>1,261 words · 12 stories · 90 grammar lessons</span></article>
         <article><b>Audio</b><span>Uses Mandarin speech available on the current device.</span></article>
-        <article><b>Offline learning data</b><span>Remains on your laptop and is never uploaded.</span></article>
+        <article><b>Cloud progress</b><span>{syncState === "saved" ? "Story and grammar status sync privately across signed-in devices." : "Waiting for an internet connection before syncing."}</span></article>
+        <article><b>Offline learning data</b><span>Your existing local tutor data remains on your laptop and is never uploaded automatically.</span></article>
         <article><b>Open source</b><a href="https://github.com/josecoves/hanlu-chinese-tutor" target="_blank" rel="noreferrer">View source on GitHub ↗</a></article>
       </div>
     </section>
   );
+}
+
+function storyProgressLabel(index: number, story: Story, progress?: StoryProgress) {
+  if (progress?.completedAt) return `STORY ${String(index).padStart(2, "0")} · COMPLETED`;
+  if (progress && progress.sentenceIndex > 0) {
+    return `STORY ${String(index).padStart(2, "0")} · CONTINUE ${progress.sentenceIndex + 1} / ${story.sentences.length}`;
+  }
+  return `STORY ${String(index).padStart(2, "0")} · ${story.sentences.length} SENTENCES`;
+}
+
+function grammarStatusLabel(status: GrammarStatus) {
+  return status === "new" ? "NEW" : status.toUpperCase();
 }
 
 function PageHead({
