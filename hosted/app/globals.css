@@ -140,6 +140,8 @@ main { min-height: calc(100vh - 150px); }
 .pattern { background: var(--ink); color: white; display: grid; gap: 10px; padding: 24px; }
 .pattern span { color: var(--yellow); font-size: 9px; font-weight: 800; }
 .pattern strong { font: 700 23px var(--serif); }
+.lesson-status { align-items: center; border: 1px solid var(--line); display: flex; font-size: 10px; font-weight: 800; gap: 16px; justify-content: space-between; margin-top: 14px; padding: 12px 14px; text-transform: uppercase; }
+.lesson-status select { background: var(--cream); border: 1px solid var(--ink); font-size: 10px; font-weight: 800; padding: 7px 9px; text-transform: uppercase; }
 .explanation { font: 18px/1.75 var(--serif); margin: 35px 0 55px; }
 .grammar-detail h3 { font: 700 28px var(--serif); }
 .examples article { align-items: center; background: var(--cream); border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr 80px; padding: 18px; }
@@ -153,6 +155,11 @@ main { min-height: calc(100vh - 150px); }
 .notice-card h2 { font: 700 34px var(--serif); }
 .notice-card p { color: var(--muted); font: 17px/1.7 var(--serif); }
 .notice-card strong { color: var(--jade); font-size: 11px; }
+.progress-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-bottom: 34px; }
+.progress-grid article { background: var(--cream); border: 1px solid var(--ink); display: grid; gap: 12px; min-height: 130px; padding: 24px; }
+.progress-grid article + article { border-left: 0; }
+.progress-grid span { color: var(--coral); font-size: 9px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; }
+.progress-grid strong { align-self: end; font: 700 30px var(--serif); }
 .settings-list { border: 1px solid var(--ink); }
 .settings-list article { align-items: center; background: var(--cream); border-bottom: 1px solid var(--line); display: grid; gap: 20px; grid-template-columns: 180px 1fr; min-height: 75px; padding: 18px 22px; }
 .settings-list article:last-child { border: 0; }
@@ -190,5 +197,7 @@ footer span { color: var(--muted); }
   .reader-controls button:last-child { grid-column: 1/-1; }
   .grammar-grid { gap: 8px; }
   .examples article { grid-template-columns: 1fr; }
+  .progress-grid { grid-template-columns: 1fr; }
+  .progress-grid article + article { border-left: 1px solid var(--ink); border-top: 0; }
   .settings-list article { grid-template-columns: 1fr; gap: 7px; }
 }
