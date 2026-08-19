@@ -1,4 +1,4 @@
-const CACHE_NAME = "hanlu-offline-v1";
+const CACHE_NAME = "hanlu-offline-v2";
 const SHELL_KEY = "/__hanlu_offline_shell__";
 
 self.addEventListener("install", () => {

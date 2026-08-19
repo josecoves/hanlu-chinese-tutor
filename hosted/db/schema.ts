@@ -8,6 +8,14 @@ export const learnerProgress = sqliteTable("learner_progress", {
   updatedAt: text("updated_at").notNull(),
 });
 
+/** Exact private copy of the most recent local export, kept for lossless recovery. */
+export const learnerImportBackup = sqliteTable("learner_import_backup", {
+  userId: text("user_id").primaryKey(),
+  schemaVersion: integer("schema_version").notNull(),
+  exportJson: text("export_json").notNull(),
+  importedAt: text("imported_at").notNull(),
+});
+
 /** Private writing drafts, submissions, and AI feedback for each learner. */
 export const writingAttempts = sqliteTable(
   "writing_attempts",
