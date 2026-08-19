@@ -108,10 +108,20 @@ def main() -> None:
                 }
                 for example in json.loads(row["theory_examples_json"] or "[]")[:5]
             ],
+            "practiceExamples": [
+                {
+                    "zh": example["zh"],
+                    "pinyin": sentence_pinyin(example["zh"]),
+                    "en": example["en"],
+                    "audio": audio_name(example["zh"]),
+                    "source": example.get("source", ""),
+                }
+                for example in json.loads(row["practice_examples_json"] or "[]")[:10]
+            ],
         }
         for row in conn.execute(
             "SELECT id,level,title_zh,title_en,pattern,explanation,"
-            "theory_examples_json FROM grammar_point ORDER BY level,id"
+            "theory_examples_json,practice_examples_json FROM grammar_point ORDER BY level,id"
         )
     ]
     payload = {"words": words, "stories": stories, "grammar": grammar}
