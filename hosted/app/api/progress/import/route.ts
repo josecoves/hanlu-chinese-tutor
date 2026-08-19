@@ -148,6 +148,33 @@ export async function POST(request: Request) {
   const progress = { version: 2, declaredHskBand, stories, grammar, vocabulary };
   const now = new Date().toISOString();
   const { env } = await import("cloudflare:workers");
+  const externalStatements = rows(payload.external_resource_progress).flatMap((resource) => {
+    const resourceId = String(resource.resource_id ?? "");
+    if (!resourceId.startsWith("reading:")) return [];
+    const provider = String(resource.provider ?? "").toLowerCase().includes("mandarin") ? "mandarinbean" : "hskreading";
+    const levelMatch = String(resource.level ?? "").match(/\d/);
+    const hskLevel = levelMatch ? Number(levelMatch[0]) : 1;
+    const url = String(resource.url ?? "");
+    const title = String(resource.title ?? "Saved reader").slice(0, 200);
+    if (!url.startsWith("https://") || hskLevel < 1 || hskLevel > 6) return [];
+    const status = resource.status === "completed" ? "completed" : resource.status === "in_progress" ? "in_progress" : "new";
+    const recap = String(resource.recap ?? "").slice(0, 8_000);
+    const hardMatch = recap.match(/Hard words?:\s*(.+?)(?:\.\s|$)/i);
+    const hardWords = hardMatch?.[1]?.trim().slice(0, 2_000) ?? "";
+    const id = `local-${resourceId.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 65)}`;
+    const openedAt = typeof resource.opened_ts === "string" ? resource.opened_ts : null;
+    const completedAt = status === "completed" && typeof resource.completed_ts === "string" ? resource.completed_ts : null;
+    const updatedAt = typeof resource.updated_ts === "string" ? resource.updated_ts : now;
+    return [env.DB.prepare(
+      `INSERT INTO external_readings
+         (id,user_id,provider,hsk_level,title,url,status,hard_words,notes,opened_at,completed_at,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,hsk_level=excluded.hsk_level,
+         title=excluded.title,url=excluded.url,status=excluded.status,hard_words=excluded.hard_words,
+         notes=excluded.notes,opened_at=excluded.opened_at,completed_at=excluded.completed_at,
+         updated_at=excluded.updated_at WHERE external_readings.user_id=excluded.user_id`,
+    ).bind(id,user.id,provider,hskLevel,title,url,status,hardWords,recap,openedAt,completedAt,updatedAt,updatedAt)];
+  });
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO learner_import_backup (user_id, schema_version, export_json, imported_at)
@@ -161,6 +188,7 @@ export async function POST(request: Request) {
        ON CONFLICT(user_id) DO UPDATE SET schema_version=2,
          progress_json=excluded.progress_json, updated_at=excluded.updated_at`,
     ).bind(user.id, JSON.stringify(progress), now),
+    ...externalStatements,
   ]);
 
   return NextResponse.json({
@@ -171,6 +199,7 @@ export async function POST(request: Request) {
       reviews: rows(payload.review_log).length,
       stories: Object.keys(stories).length,
       grammar: Object.keys(grammar).length,
+      externalReadings: externalStatements.length,
     },
   });
 }
