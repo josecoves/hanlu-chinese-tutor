@@ -42,6 +42,10 @@ test("hosted curriculum keeps the rich vocabulary and complete story export", as
   assert.ok(data.stories.every((story) => story.sentences.every(
     (sentence) => sentence.audio && Array.isArray(sentence.words),
   )));
+  assert.ok(data.grammar.every((lesson) => lesson.practiceExamples.length >= 1));
+  assert.ok(data.grammar.every((lesson) => lesson.practiceExamples.every(
+    (example) => example.zh && example.en && example.pinyin && example.audio,
+  )));
 });
 
 test("every hosted curriculum audio reference exists and is non-empty", async () => {
@@ -53,12 +57,29 @@ test("every hosted curriculum audio reference exists and is non-empty", async ()
     ...data.words.map((word) => word.audio),
     ...data.stories.flatMap((story) => story.sentences.map((sentence) => sentence.audio)),
     ...data.grammar.flatMap((lesson) => lesson.examples.map((example) => example.audio)),
+    ...data.grammar.flatMap((lesson) => lesson.practiceExamples.map((example) => example.audio)),
   ]);
   assert.ok(names.size > 1700);
   for (const name of names) {
     const info = await stat(new URL(`../public/audio/${name}`, import.meta.url));
     assert.ok(info.size > 0, `${name} is empty`);
   }
+});
+
+test("cloud practice and external readers stay private and server-backed", async () => {
+  const app = await readFile(new URL("../app/hanlu-app.tsx", import.meta.url), "utf8");
+  const grammarReview = await readFile(new URL("../app/api/grammar/review/route.ts", import.meta.url), "utf8");
+  const comprehension = await readFile(new URL("../app/api/comprehension/route.ts", import.meta.url), "utf8");
+  assert.match(app, /Practice reading/);
+  assert.match(app, /Ask AI to verify & explain/);
+  assert.match(app, /Flag & skip/);
+  assert.match(app, /Import selected file/);
+  assert.match(grammarReview, /getChatGPTUser/);
+  assert.match(grammarReview, /DEEPSEEK_API_KEY/);
+  assert.match(grammarReview, /DAILY_REQUEST_LIMIT = 35/);
+  assert.match(grammarReview, /DAILY_BUDGET_MICRO_USD = 20_000/);
+  assert.match(comprehension, /getChatGPTUser/);
+  assert.match(comprehension, /external_readings/);
 });
 
 test("progress import is authenticated, private, and includes local learning dimensions", async () => {

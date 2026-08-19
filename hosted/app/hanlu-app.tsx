@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loadOfflineProgress, saveOfflineProgress } from "./offline-progress";
 import { loadWritingDraft, saveWritingDraft } from "./offline-writing";
 
@@ -38,6 +38,7 @@ type Grammar = {
   explanation: string;
   recommendedEarly: boolean;
   examples: Array<{ zh: string; pinyin: string; en: string; audio: string }>;
+  practiceExamples: Array<{ zh: string; pinyin: string; en: string; audio: string; source: string }>;
 };
 type Content = { words: Word[]; stories: Story[]; grammar: Grammar[] };
 type StoryProgress = {
@@ -89,6 +90,7 @@ type Tab =
   | "Vocabulary"
   | "Topics"
   | "Stories"
+  | "Comprehension"
   | "Writing"
   | "Grammar"
   | "Progress"
@@ -99,6 +101,7 @@ const tabs: Tab[] = [
   "Vocabulary",
   "Topics",
   "Stories",
+  "Comprehension",
   "Writing",
   "Grammar",
   "Progress",
@@ -397,6 +400,7 @@ export function HanluApp({ content }: { content: Content }) {
             }}
           />
         )}
+        {tab === "Comprehension" && <Comprehension />}
         {tab === "Writing" && <WritingStudio content={content} />}
         {tab === "Grammar" && (
           <GrammarLibrary
@@ -794,6 +798,66 @@ function Vocabulary({
   progress: CloudProgress;
   updateProgress: (id: number, update: (current: VocabularyProgress) => VocabularyProgress) => void;
 }) {
+  const [practiceMode, setPracticeMode] = useState<"reading" | "listening" | null>(null);
+  const [queue, setQueue] = useState<Word[]>([]);
+  const [practiceIndex, setPracticeIndex] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const currentWord = queue[practiceIndex];
+
+  const startPractice = (mode: "reading" | "listening") => {
+    const prioritized = [...words].sort((a, b) => {
+      const aState = progress.vocabulary[String(a.id)];
+      const bState = progress.vocabulary[String(b.id)];
+      return Number(Boolean(bState?.needsPractice)) - Number(Boolean(aState?.needsPractice))
+        || Math.min(aState?.readingScore ?? 101, aState?.listeningScore ?? 101) - Math.min(bState?.readingScore ?? 101, bState?.listeningScore ?? 101)
+        || Math.random() - .5;
+    }).slice(0, 30);
+    setQueue(prioritized);
+    setPracticeIndex(0);
+    setRevealed(false);
+    setPracticeMode(mode);
+  };
+  const gradeWord = (rating: "again" | "hard" | "good" | "known") => {
+    if (!currentWord || !practiceMode) return;
+    const target = { again: 15, hard: 45, good: 78, known: 96 }[rating];
+    updateProgress(currentWord.id, (state) => {
+      const key = practiceMode === "listening" ? "listeningScore" : "readingScore";
+      const previous = state[key];
+      const score = previous === undefined ? target : Math.round(previous * .65 + target * .35);
+      return { ...state, [key]: score, practices: state.practices + 1, lastReviewTs: new Date().toISOString(), needsPractice: rating === "again" || rating === "hard", known: rating === "known" ? true : rating === "again" ? false : state.known };
+    });
+    setPracticeIndex((index) => index + 1);
+    setRevealed(false);
+  };
+
+  useEffect(() => {
+    if (!practiceMode || !currentWord) return;
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input,textarea,select") || target?.isContentEditable) return;
+      if (event.key.toLowerCase() === "a") playAudio(currentWord.hanzi, currentWord.audio);
+      else if (!revealed && (event.key === " " || event.key === "Enter")) setRevealed(true);
+      else if (revealed && ["1","2","3","4"].includes(event.key)) gradeWord((["again","hard","good","known"] as const)[Number(event.key)-1]);
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
+
+  if (practiceMode) {
+    if (!currentWord) return <section className="page narrow"><div className="practice-finish"><span className="eyebrow">SESSION COMPLETE</span><h1>{queue.length} words reviewed</h1><p>Your confidence and activity are saved to private cloud progress.</p><button className="primary" onClick={() => setPracticeMode(null)}>Back to vocabulary</button></div></section>;
+    return <section className="page narrow vocab-practice">
+      <header><button onClick={() => setPracticeMode(null)}>← End session</button><span>{practiceIndex + 1} / {queue.length} · {practiceMode === "listening" ? "Listening" : "Reading"}</span></header>
+      <article>
+        <span className="eyebrow">{practiceMode === "listening" ? "LISTEN, THEN RECALL" : "READ, THEN RECALL"}</span>
+        {practiceMode === "listening" ? <button className="practice-audio" onClick={() => playAudio(currentWord.hanzi,currentWord.audio)}>A · Play audio</button> : <h1>{currentWord.hanzi}</h1>}
+        {!revealed ? <button className="reveal" onClick={() => setRevealed(true)}>Reveal answer · Space</button> : <div className="practice-answer"><h2>{currentWord.hanzi}</h2><strong>{currentWord.pinyin}</strong><p>{currentWord.meaning}</p><span>HSK {currentWord.hskLevels.join(" · ")}{currentWord.measureWord ? ` · measure word ${currentWord.measureWord}` : ""}</span></div>}
+      </article>
+      {revealed && <div className="grade-row"><button onClick={() => gradeWord("again")}><b>1</b> Again</button><button onClick={() => gradeWord("hard")}><b>2</b> Hard</button><button onClick={() => gradeWord("good")}><b>3</b> Good</button><button onClick={() => gradeWord("known")}><b>4</b> Known</button></div>}
+      <p className="reader-shortcuts">A audio · Space reveal · 1–4 grade</p>
+    </section>;
+  }
   return (
     <section className="page">
       <PageHead eyebrow="YOUR KNOWLEDGE MODEL" title="Vocabulary" text="Search and filter the full HSK 1–2 collection. Memory and activity return after you import the local progress export in Settings." />
@@ -805,7 +869,7 @@ function Vocabulary({
         <label><span>Sort by</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="hsk">HSK level</option><option value="hanzi">Hanzi</option><option value="practiced">Most practiced</option><option value="last">Recently practiced</option></select></label>
         <button onClick={() => { setQuery(""); setHsk(0); setSelectedTopics([]); setPracticeFilter("all"); setSort("hsk"); }}>Clear</button>
       </div>
-      <p className="result-note">Showing {words.length} matching words</p>
+      <div className="practice-toolbar"><p className="result-note">Showing {words.length} matching words · practice uses exactly these filters</p><div><button disabled={!words.length} onClick={() => startPractice("reading")}>Practice reading</button><button disabled={!words.length} onClick={() => startPractice("listening")}>Practice listening</button></div></div>
       <div className="vocab-legend"><span><b>Memory</b><i>L</i> listening confidence <i>R</i> reading confidence</span><span><b>Activity</b><i>×</i> practice attempts · time since last practice <i>+R</i> add to review</span></div>
       <div className="word-table">
         <div className="word-row word-head"><span>Hanzi</span><span>Pinyin</span><span>Meaning</span><span>HSK</span><span>Measure</span><span>Memory</span><span>Activity</span></div>
@@ -1021,7 +1085,9 @@ function GrammarLibrary({
   setStatus: (id: number, status: GrammarStatus) => void;
 }) {
   const [level, setLevel] = useState(1);
+  const [practice, setPractice] = useState<{ lesson: Grammar; direction: "zh_en" | "en_zh" } | null>(null);
   const selected = lessons.find((lesson) => lesson.id === selectedId);
+  if (practice) return <GrammarPractice lesson={practice.lesson} direction={practice.direction} onBack={() => setPractice(null)} onStatus={setStatus} />;
   if (selected) {
     return (
       <section className="grammar-detail">
@@ -1041,6 +1107,7 @@ function GrammarLibrary({
           </select>
         </label>
         <p className="explanation">{selected.explanation}</p>
+        <div className="grammar-actions"><button className="primary" onClick={() => setPractice({ lesson:selected,direction:"zh_en" })}>Practice Chinese → English</button><button onClick={() => setPractice({ lesson:selected,direction:"en_zh" })}>Practice English → Chinese</button><a href={`https://resources.allsetlearning.com/chinese/grammar/HSK_${selected.level}_grammar_points`} target="_blank" rel="noreferrer">Read more on Chinese Grammar Wiki ↗</a></div>
         <h3>Worked examples</h3>
         <div className="examples">
           {selected.examples.map((example, index) => (
@@ -1064,6 +1131,107 @@ function GrammarLibrary({
       </div>
     </section>
   );
+}
+
+type GrammarFeedback = {
+  verdict: "correct" | "needs_revision";
+  targetGrammarCorrect: boolean;
+  summary: string;
+  explanation: string;
+  correctedAnswer: string;
+  vocabularyHelp: Array<{ english: string; chinese: string; pinyin: string; hskLevel: string }>;
+  differences: Array<{ learner: string; suggested: string; reason: string }>;
+};
+
+function GrammarPractice({ lesson, direction, onBack, onStatus }: { lesson: Grammar; direction: "zh_en" | "en_zh"; onBack: () => void; onStatus: (id:number,status:GrammarStatus)=>void }) {
+  const [queue] = useState(() => [...(lesson.practiceExamples.length ? lesson.practiceExamples : lesson.examples)].sort(() => Math.random()-.5));
+  const [index,setIndex] = useState(0);
+  const [answer,setAnswer] = useState("");
+  const [attemptId,setAttemptId] = useState("");
+  const [submitted,setSubmitted] = useState(false);
+  const [feedback,setFeedback] = useState<GrammarFeedback|null>(null);
+  const [message,setMessage] = useState("");
+  const [question,setQuestion] = useState("");
+  const [asking,setAsking] = useState(false);
+  const example = queue[index];
+  const prompt = direction === "en_zh" ? example?.en : example?.zh;
+  const expected = direction === "en_zh" ? example?.zh : example?.en;
+  const normalizedExact = Boolean(answer && expected && normalizeAnswer(answer) === normalizeAnswer(expected));
+
+  const next = () => { setIndex((value)=>value+1);setAnswer("");setSubmitted(false);setFeedback(null);setAttemptId("");setMessage("");setQuestion(""); };
+  const submit = async () => {
+    if (!answer.trim() || !example) return;
+    setSubmitted(true); setMessage("Saving your attempt…"); onStatus(lesson.id,"practicing");
+    try {
+      const response = await fetch("/api/grammar/attempts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({grammarId:lesson.id,direction,prompt,response:answer,expected,verdict:normalizedExact?"correct":"pending"})});
+      const result = await response.json() as {id?:string;error?:string};
+      if (!response.ok || !result.id) throw new Error(result.error||"Could not save the attempt.");
+      setAttemptId(result.id);setMessage(normalizedExact ? "Exact match — correct." : "Saved. This is not marked wrong: compare it yourself or ask AI to verify natural alternatives.");
+    } catch(error) { setMessage(error instanceof Error?error.message:"Could not save the attempt."); }
+  };
+  const askAi = async () => {
+    if (!submitted || !attemptId) return;
+    setAsking(true);setMessage("Asking the Mandarin tutor…");
+    try {
+      const response = await fetch("/api/grammar/review",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({attemptId,lesson:`HSK ${lesson.level} · ${lesson.titleEn}`,pattern:lesson.pattern,prompt,answer,expected,question})});
+      const result = await response.json() as {feedback?:GrammarFeedback;error?:string};
+      if (!response.ok || !result.feedback) throw new Error(result.error||"The review could not be completed.");
+      setFeedback(result.feedback);setQuestion("");setMessage("");
+    } catch(error) { setMessage(error instanceof Error?error.message:"The review could not be completed."); }
+    finally { setAsking(false); }
+  };
+  const flagAndSkip = async () => {
+    if (!example) return;
+    setMessage("Flagging this exercise…");
+    try { await fetch("/api/reports",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"grammar_exercise",referenceId:`grammar:${lesson.id}:${index}`,note:"Flagged and skipped during grammar practice",context:{lesson:lesson.titleEn,pattern:lesson.pattern,prompt,expected,answer}})}); }
+    finally { next(); }
+  };
+
+  if (!example) return <section className="page narrow"><div className="practice-finish"><span className="eyebrow">LESSON PRACTICE COMPLETE</span><h1>{queue.length} different examples practiced</h1><p>Your attempts are saved. Mark the lesson learned when the pattern feels comfortable.</p><div><button onClick={onBack}>Back to lesson</button><button className="primary" onClick={()=>{onStatus(lesson.id,"learned");onBack();}}>Mark learned</button></div></div></section>;
+  return <section className="page grammar-practice">
+    <header className="practice-header"><button onClick={onBack}>← Back to {lesson.titleEn}</button><span>HSK {lesson.level} · {index+1}/{queue.length}</span></header>
+    <div className="practice-layout"><article className="exercise-card"><span className="eyebrow">{direction === "en_zh" ? "TRANSLATE INTO CHINESE" : "TRANSLATE INTO ENGLISH"}</span><h1>{prompt}</h1>{direction === "zh_en" && <><p className="reader-pinyin">{example.pinyin}</p><button className="word-audio" onClick={()=>playAudio(example.zh,example.audio)}>A · Audio</button></>}<label>Your answer<textarea value={answer} onChange={(event)=>setAnswer(event.target.value)} disabled={submitted} placeholder={direction === "en_zh" ? "Write Chinese here. English placeholders are okay for words you do not know." : "Write a natural English translation."} /></label>{!submitted ? <button className="primary submit-answer" onClick={()=>void submit()} disabled={!answer.trim()}>Check answer</button> : <div className="model-answer"><span>MODEL ANSWER</span><strong>{expected}</strong>{direction === "en_zh" && <small>{example.pinyin}</small>}<p>{message}</p></div>}</article>
+      <aside className="practice-side"><span className="eyebrow">TARGET PATTERN</span><strong>{lesson.pattern}</strong><p>{lesson.titleEn}</p>{submitted && <><button className="primary" onClick={()=>void askAi()} disabled={asking}>{asking?"Checking…":"Ask AI to verify & explain"}</button><label>Follow-up question<textarea value={question} onChange={(event)=>setQuestion(event.target.value)} placeholder="Why is this more natural? Could my version also be correct?" /></label>{feedback && <div className="grammar-feedback"><b className={feedback.verdict}>{feedback.verdict === "correct"?"Correct":"Needs revision"}</b><h3>{feedback.summary}</h3><p>{feedback.explanation}</p><div><span>NATURAL ANSWER</span><strong>{feedback.correctedAnswer}</strong></div>{feedback.vocabularyHelp.length>0&&<ul>{feedback.vocabularyHelp.map((item,i)=><li key={i}><b>{item.english}</b> → {item.chinese} · {item.pinyin} <em>{item.hskLevel}</em></li>)}</ul>}{feedback.differences.length>0&&<ul>{feedback.differences.map((item,i)=><li key={i}><b>{item.learner||"Your version"}</b> → {item.suggested}: {item.reason}</li>)}</ul>}</div>}<div className="practice-secondary"><button onClick={()=>void flagAndSkip()}>Flag & skip</button><button onClick={next}>Next →</button></div></>}</aside></div>
+  </section>;
+}
+
+function normalizeAnswer(value:string) { return value.toLowerCase().replace(/[\s，。！？、,.!?;；:：'"“”‘’]/g,""); }
+
+type ExternalReading = { id:string;provider:"mandarinbean"|"hskreading";hsk_level:number;title:string;url:string;status:"new"|"in_progress"|"completed";hard_words:string;notes:string;updated_at:string };
+
+function Comprehension() {
+  const [provider,setProvider] = useState<"mandarinbean"|"hskreading">("hskreading");
+  const [level,setLevel] = useState(1);
+  const [readings,setReadings] = useState<ExternalReading[]>([]);
+  const [url,setUrl] = useState("");
+  const [title,setTitle] = useState("");
+  const [hardWords,setHardWords] = useState("");
+  const [notes,setNotes] = useState("");
+  const [status,setStatus] = useState<ExternalReading["status"]>("completed");
+  const [message,setMessage] = useState("");
+  const [saving,setSaving] = useState(false);
+  const load = () => void fetch("/api/comprehension",{cache:"no-store"}).then(async(response)=>{if(!response.ok)throw new Error();return response.json() as Promise<{readings:ExternalReading[]}>;}).then((result)=>setReadings(result.readings)).catch(()=>setMessage("Saved readers are temporarily unavailable."));
+  useEffect(load,[]);
+  const addReading = async () => {
+    if (!url.trim()) return;
+    setSaving(true);setMessage("Saving reader…");
+    try {
+      const response=await fetch("/api/comprehension",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({provider,hskLevel:level,url,title,hardWords,notes,status})});
+      const result=await response.json() as {error?:string};if(!response.ok)throw new Error(result.error||"Could not save the reader.");
+      setUrl("");setTitle("");setHardWords("");setNotes("");setMessage("Reader saved.");load();
+    } catch(error){setMessage(error instanceof Error?error.message:"Could not save the reader.");} finally{setSaving(false);}
+  };
+  const updateStatus=async(reading:ExternalReading,next:ExternalReading["status"])=>{await fetch("/api/comprehension",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:reading.id,status:next})});setReadings((current)=>current.map((item)=>item.id===reading.id?{...item,status:next}:item));};
+  const openReading=(reading:ExternalReading)=>{void updateStatus(reading,reading.status==="completed"?"completed":"in_progress");window.open(reading.url,"_blank","noopener,noreferrer");};
+  const sourceUrl=provider==="mandarinbean"?"https://mandarinbean.com/all-lessons/":`https://hskreading.com/category/hsk-${level}/`;
+  const filtered=readings.filter((item)=>item.provider===provider&&item.hsk_level===level);
+  return <section className="page comprehension-page"><PageHead eyebrow="EXTERNAL READING & LISTENING" title="Comprehension" text="Use authoritative graded readers, then save the exact article, status, hard words, and notes to your private Hanlu account." />
+    <div className="source-tabs"><button className={provider==="hskreading"?"active":""} onClick={()=>setProvider("hskreading")}>HSKReading</button><button className={provider==="mandarinbean"?"active":""} onClick={()=>setProvider("mandarinbean")}>MandarinBean</button></div>
+    <section className="source-hero"><div><span className="eyebrow">{provider === "hskreading" ? `HSK ${level} LIBRARY` : "ALL-LEVEL LIBRARY"}</span><h2>{provider === "hskreading" ? "HSKReading" : "MandarinBean"}</h2><p>{provider === "hskreading" ? "Free level-specific readings with questions, pinyin, translation, and voice-over." : "Graded reading and listening lessons across HSK levels. Choose a level on their library page."}</p></div><a href={sourceUrl} target="_blank" rel="noreferrer">Open {provider === "hskreading" ? `HSK ${level} readers` : "MandarinBean library"} ↗</a></section>
+    <div className="level-tabs">{[1,2,3,4,5,6].map((item)=><button key={item} className={level===item?"active":""} onClick={()=>setLevel(item)}>HSK {item}</button>)}</div>
+    <div className="comprehension-layout"><section><div className="section-heading"><div><span className="eyebrow">YOUR READING LOG</span><h2>HSK {level} · {filtered.length} saved</h2></div></div>{filtered.length===0?<div className="empty-reader"><h3>No saved readers at this level yet.</h3><p>Open the source library, complete one article, then save its exact URL here.</p></div>:<div className="saved-readers">{filtered.map((reading)=><article key={reading.id}><div><span className="reading-provider">{reading.status.replace("_"," ")}</span><button className="reading-title" onClick={()=>openReading(reading)}>{reading.title} ↗</button>{reading.hard_words&&<p><b>Hard words:</b> {reading.hard_words}</p>}{reading.notes&&<p>{reading.notes}</p>}</div><select value={reading.status} onChange={(event)=>void updateStatus(reading,event.target.value as ExternalReading["status"])} aria-label={`Status for ${reading.title}`}><option value="new">New</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select></article>)}</div>}</section>
+      <aside className="add-reader"><span className="eyebrow">ADD A READER</span><h2>Save what you studied</h2><label>Exact article URL<input value={url} onChange={(event)=>setUrl(event.target.value)} placeholder={provider==="hskreading"?"https://hskreading.com/article-name/":"https://mandarinbean.com/article-name/"} /></label><label>Title <small>optional — inferred from URL</small><input value={title} onChange={(event)=>setTitle(event.target.value)} placeholder="Reader title" /></label><label>Hard words<textarea value={hardWords} onChange={(event)=>setHardWords(event.target.value)} placeholder="晚餐 — dinner / evening meal" /></label><label>Notes <small>optional</small><textarea value={notes} onChange={(event)=>setNotes(event.target.value)} placeholder="What was difficult or useful?" /></label><label>Status<select value={status} onChange={(event)=>setStatus(event.target.value as ExternalReading["status"])}><option value="new">New</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select></label><button className="primary" disabled={saving||!url.trim()} onClick={()=>void addReading()}>{saving?"Saving…":"Save reader"}</button>{message&&<p role="status">{message}</p>}</aside></div>
+  </section>;
 }
 
 function Progress({
@@ -1096,7 +1264,7 @@ function Progress({
         <article><span>Grammar in progress</span><strong>{practicingGrammar}</strong></article>
         <article><span>Grammar learned</span><strong>{learnedGrammar}</strong></article>
       </div>
-      <div className="notice-card"><span>{syncState === "saved" ? "SAVED PRIVATELY" : "SAVED ON THIS DEVICE"}</span><h2>{syncState === "saved" ? "Your progress is synced." : "Your progress will sync when this device is back online."}</h2><p>The original local tutor remains unchanged on this laptop. Use Settings to import a fresh local progress export; Hanlu keeps an exact private backup before creating the cloud summary.</p><strong>Full cloud spaced-repetition sessions remain the next parity milestone.</strong></div>
+      <div className="notice-card"><span>{syncState === "saved" ? "SAVED PRIVATELY" : "SAVED ON THIS DEVICE"}</span><h2>{syncState === "saved" ? "Your progress is synced." : "Your progress will sync when this device is back online."}</h2><p>The original local tutor remains unchanged on this laptop. Use Settings to import a fresh local progress export; Hanlu keeps an exact private backup before creating the cloud summary.</p><strong>Filtered vocabulary review, grammar practice, writing review, and external-reader tracking are available in the private cloud app.</strong></div>
     </section>
   );
 }
@@ -1104,13 +1272,15 @@ function Progress({
 function Settings({ syncState, onImported }: { syncState: SyncState; onImported: (progress: CloudProgress) => void }) {
   const [importState, setImportState] = useState("");
   const [importing, setImporting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  const importProgress = async (file?: File) => {
-    if (!file) return;
+  const importProgress = async () => {
+    if (!selectedFile) return;
     setImporting(true);
     setImportState("Reading and validating the local export…");
     try {
-      const payload = JSON.parse(await file.text()) as unknown;
+      const payload = JSON.parse(await selectedFile.text()) as unknown;
       const response = await fetch("/api/progress/import", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1120,6 +1290,8 @@ function Settings({ syncState, onImported }: { syncState: SyncState; onImported:
       if (!response.ok || !result.progress || !result.imported) throw new Error(result.error || "The import could not be completed.");
       onImported(result.progress);
       setImportState(`Imported ${result.imported.vocabulary} vocabulary records, ${result.imported.reviews} reviews, ${result.imported.stories} stories, and ${result.imported.grammar} grammar statuses. An exact private backup was retained.`);
+      setSelectedFile(null);
+      if (fileInput.current) fileInput.current.value = "";
     } catch (error) {
       setImportState(error instanceof Error ? error.message : "The import could not be completed.");
     } finally {
@@ -1133,8 +1305,8 @@ function Settings({ syncState, onImported }: { syncState: SyncState; onImported:
       <section className="import-card">
         <span className="eyebrow">RESTORE LOCAL PROGRESS</span>
         <h2>Import a Hanlu progress export</h2>
-        <p>Select a fresh <code>progress_export.json</code>. The file is stored privately for recovery, then converted into vocabulary memory, activity, story, and grammar progress for this account.</p>
-        <label className={importing ? "disabled" : ""}>Choose progress JSON<input type="file" accept="application/json,.json" disabled={importing} onChange={(event) => void importProgress(event.target.files?.[0])} /></label>
+        <p>Choose a fresh Hanlu JSON export. Nothing is uploaded until you press <b>Import selected file</b>. An exact private recovery copy is retained.</p>
+        <div className="import-picker"><input ref={fileInput} id="progress-import" type="file" accept="application/json,.json" disabled={importing} onChange={(event) => { setSelectedFile(event.target.files?.[0] ?? null); setImportState(""); }} /><label htmlFor="progress-import" className={importing ? "disabled" : ""}>{selectedFile ? "Choose another file" : "Choose JSON file"}</label><div><strong>{selectedFile?.name ?? "No file selected"}</strong><span>{selectedFile ? `${Math.max(1,Math.round(selectedFile.size/1024))} KB · ready to import` : "Recommended: Hanlu-progress-2026-08-19.json in Downloads"}</span></div><button className="primary" disabled={!selectedFile||importing} onClick={()=>void importProgress()}>{importing?"Importing…":"Import selected file"}</button></div>
         {importState && <p className="import-state" role="status">{importState}</p>}
       </section>
       <div className="settings-list">
