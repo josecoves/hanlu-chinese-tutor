@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { loadOfflineProgress, saveOfflineProgress } from "./offline-progress";
+import { loadWritingDraft, saveWritingDraft } from "./offline-writing";
 
 type Word = {
   id: number;
@@ -37,11 +38,32 @@ type CloudProgress = {
   grammar: Record<string, GrammarStatus>;
 };
 type SyncState = "loading" | "saved" | "offline";
+type WritingMode = "prompt" | "message" | "translation" | "guided";
+type ReviewSection = { status: string; feedback: string };
+type WritingFeedback = {
+  verdict: "clear" | "needs_revision";
+  summary: string;
+  taskCompletion: ReviewSection;
+  grammarWordOrder: ReviewSection;
+  vocabularyNaturalness: ReviewSection;
+  charactersTyping: ReviewSection;
+  placeholders: Array<{
+    english: string;
+    chinese: string;
+    pinyin: string;
+    hskLevel: string;
+    note: string;
+  }>;
+  correctedChinese: string;
+  changes: Array<{ original: string; replacement: string; reason: string }>;
+  revisionPrompt: string;
+};
 type Tab =
   | "Today"
   | "Vocabulary"
   | "Topics"
   | "Stories"
+  | "Writing"
   | "Grammar"
   | "Progress"
   | "Settings";
@@ -51,6 +73,7 @@ const tabs: Tab[] = [
   "Vocabulary",
   "Topics",
   "Stories",
+  "Writing",
   "Grammar",
   "Progress",
   "Settings",
@@ -277,6 +300,7 @@ export function HanluApp({ content }: { content: Content }) {
             progress={progress.stories}
           />
         )}
+        {tab === "Writing" && <WritingStudio content={content} />}
         {tab === "Grammar" && (
           <GrammarLibrary
             lessons={content.grammar}
@@ -355,10 +379,290 @@ function Today({
         <div className="path-grid">
           <button onClick={() => onTab("Stories")}><b>01</b><strong>Read in context</strong><span>Stories with pinyin, translation, and audio.</span></button>
           <button onClick={() => onTab("Grammar")}><b>02</b><strong>Understand the pattern</strong><span>HSK-organized explanations and examples.</span></button>
-          <button onClick={() => onTab("Topics")}><b>03</b><strong>Build useful vocabulary</strong><span>Browse HSK 1–2 words by everyday theme.</span></button>
+          <button onClick={() => onTab("Writing")}><b>03</b><strong>Write something real</strong><span>Messages, short prompts, translations, and guided vocabulary practice.</span></button>
         </div>
       </section>
     </>
+  );
+}
+
+const writingModes: Array<{
+  id: WritingMode;
+  label: string;
+  description: string;
+}> = [
+  { id: "prompt", label: "Short response", description: "Answer a practical question in 2–5 sentences." },
+  { id: "message", label: "Message reply", description: "Reply naturally to a text, invitation, or request." },
+  { id: "translation", label: "Story translation", description: "Retell a short English scene in Chinese." },
+  { id: "guided", label: "Target words", description: "Write freely while using selected vocabulary." },
+];
+
+const writingPrompts: Record<WritingMode, Record<number, string[]>> = {
+  prompt: {
+    1: [
+      "Introduce yourself. Say where you live, what languages you speak, and one thing you like.",
+      "Describe your normal morning in 2–4 sentences.",
+      "What do you like to eat and drink? Say when or where you usually have it.",
+      "Describe one person in your family and something you do together.",
+    ],
+    2: [
+      "Describe a recent weekend: where you went, who was there, and how you felt.",
+      "Explain how you are learning Chinese and what is still difficult.",
+      "A friend will visit your city. Recommend a simple plan for one afternoon.",
+      "Describe a small problem you had recently and what you did next.",
+    ],
+  },
+  message: {
+    1: [
+      "小林：你好！你明天下午有空吗？我们一起喝茶吧。\nReply with whether you are free, a time, and one question.",
+      "朋友：我今天不舒服，不能去学校。\nReply kindly and offer one simple suggestion.",
+      "妈妈：你晚上回家吃饭吗？\nReply with your plan and what time you will arrive.",
+    ],
+    2: [
+      "朋友：周六我想去爬山，但是天气可能不太好。你觉得呢？\nReply with your opinion and suggest an alternative plan.",
+      "同学：下周的考试我还没准备好，你可以跟我一起复习吗？\nReply with when you can help and what to review first.",
+      "朋友：我刚搬到你住的城市。附近有什么好吃的？\nRecommend a place or dish and explain why.",
+    ],
+  },
+  translation: {
+    1: [
+      "Today I am at home. In the morning I drink tea and read a book. In the afternoon, my friend comes to see me.",
+      "My older sister is a teacher. She works at a school near our home. We often eat dinner together.",
+      "It is raining today, so I do not go to the park. I stay home and watch a Chinese movie.",
+    ],
+    2: [
+      "Yesterday I planned to take the bus, but it arrived too late. I walked to the station and was ten minutes late.",
+      "A friend invited me to dinner. The restaurant was crowded, but the food was delicious and not too expensive.",
+      "I have studied Chinese for six months. I can understand simple stories, but speaking is still harder than reading.",
+    ],
+  },
+  guided: {
+    1: ["Write 3–5 connected sentences. Use at least three of your selected words naturally."],
+    2: ["Write a short scene or message. Use at least three of your selected words naturally."],
+  },
+};
+
+function WritingStudio({ content }: { content: Content }) {
+  const [mode, setMode] = useState<WritingMode>("prompt");
+  const [level, setLevel] = useState(1);
+  const [promptIndex, setPromptIndex] = useState(0);
+  const [responseText, setResponseText] = useState("");
+  const [attemptId, setAttemptId] = useState(() => crypto.randomUUID());
+  const [targetWords, setTargetWords] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
+  const [message, setMessage] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [history, setHistory] = useState<Array<{
+    id: string;
+    mode: WritingMode;
+    hsk_level: number;
+    prompt_text: string;
+    response_text: string;
+    target_words_json?: string | null;
+    feedback_json?: string | null;
+    updated_at: string;
+  }>>([]);
+
+  const prompts = writingPrompts[mode][level];
+  const promptText = prompts[promptIndex % prompts.length];
+  const suggestions = useMemo(() => {
+    const levelWords = content.words.filter((word) => word.hsk === level);
+    const start = (promptIndex * 7 + (mode === "guided" ? 13 : 0)) % Math.max(1, levelWords.length);
+    return Array.from({ length: Math.min(8, levelWords.length) }, (_, offset) =>
+      levelWords[(start + offset * 11) % levelWords.length],
+    );
+  }, [content.words, level, mode, promptIndex]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadWritingDraft().then((draft) => {
+      if (cancelled || !draft) return;
+      setMode(draft.mode);
+      setLevel(draft.level);
+      setPromptIndex(draft.promptIndex);
+      setResponseText(draft.responseText);
+      setAttemptId(draft.attemptId);
+      setTargetWords(draft.targetWords);
+    }).catch(() => undefined).finally(() => {
+      if (!cancelled) setDraftLoaded(true);
+    });
+    void fetch("/api/writing", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : { attempts: [] })
+      .then((result: { attempts?: typeof history }) => {
+        if (!cancelled) setHistory(result.attempts ?? []);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!draftLoaded) return;
+    const timeout = window.setTimeout(() => {
+      void saveWritingDraft({
+        mode,
+        level,
+        promptIndex,
+        responseText,
+        attemptId,
+        targetWords,
+      }).catch(() => undefined);
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [attemptId, draftLoaded, level, mode, promptIndex, responseText, targetWords]);
+
+  const chooseMode = (nextMode: WritingMode) => {
+    setMode(nextMode);
+    setPromptIndex(0);
+    setResponseText("");
+    setFeedback(null);
+    setMessage("");
+    setAttemptId(crypto.randomUUID());
+    setTargetWords([]);
+  };
+
+  const nextPrompt = () => {
+    setPromptIndex((index) => index + 1);
+    setResponseText("");
+    setFeedback(null);
+    setMessage("");
+    setAttemptId(crypto.randomUUID());
+    setTargetWords([]);
+  };
+
+  const saveDraft = async () => {
+    setMessage("Saving…");
+    try {
+      const response = await fetch("/api/writing", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ attemptId, id: attemptId, mode, hskLevel: level, promptText, responseText, targetWords }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not save the draft.");
+      setMessage("Draft saved privately.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Saved on this device; cloud save is waiting for a connection.");
+    }
+  };
+
+  const reviewDraft = async () => {
+    if (!responseText.trim()) {
+      setMessage("Write a response first. English placeholders are welcome.");
+      return;
+    }
+    setReviewing(true);
+    setMessage("Reviewing your meaning, grammar, and vocabulary…");
+    try {
+      const response = await fetch("/api/writing/review", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ attemptId, mode, hskLevel: level, promptText, responseText, targetWords }),
+      });
+      const result = await response.json() as { error?: string; feedback?: WritingFeedback };
+      if (!response.ok || !result.feedback) throw new Error(result.error || "The review could not finish.");
+      setFeedback(result.feedback);
+      setMessage("Review ready. Your original draft is preserved below.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The review could not finish.");
+    } finally {
+      setReviewing(false);
+    }
+  };
+
+  return (
+    <section className="page writing-page">
+      <PageHead eyebrow="WRITE · REVISE · REUSE" title="Writing studio" text="Practice useful Chinese without getting stuck on one missing word. Type unknown words in English; the reviewer will translate them and assess the Chinese around them." />
+
+      <div className="writing-mode-grid" aria-label="Writing practice modes">
+        {writingModes.map((item) => (
+          <button key={item.id} className={mode === item.id ? "active" : ""} onClick={() => chooseMode(item.id)}>
+            <strong>{item.label}</strong><span>{item.description}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="writing-toolbar">
+        <label>Level
+          <select value={level} onChange={(event) => { setLevel(Number(event.target.value)); setPromptIndex(0); setTargetWords([]); setFeedback(null); }}>
+            <option value={1}>HSK 1</option><option value={2}>HSK 2</option>
+          </select>
+        </label>
+        <button onClick={nextPrompt}>New prompt ↻</button>
+      </div>
+
+      <div className="writing-workspace">
+        <article className="writing-prompt-card">
+          <span className="eyebrow">YOUR TASK</span>
+          <h2>{mode === "translation" ? "Translate into natural Chinese" : mode === "message" ? "Write your reply" : mode === "guided" ? "Use the target words" : "Respond in Chinese"}</h2>
+          <p>{promptText}</p>
+          {mode === "guided" && (
+            <div className="target-word-picker">
+              <span>Choose at least three:</span>
+              <div>{suggestions.map((word) => {
+                const selected = targetWords.includes(word.hanzi);
+                return <button key={word.id} className={selected ? "selected" : ""} onClick={() => setTargetWords((current) => selected ? current.filter((item) => item !== word.hanzi) : [...current, word.hanzi])}><b>{word.hanzi}</b> {word.pinyin} · {word.meaning}</button>;
+              })}</div>
+            </div>
+          )}
+        </article>
+
+        <article className="writing-editor-card">
+          <label htmlFor="writing-answer">Your Chinese</label>
+          <textarea id="writing-answer" value={responseText} onChange={(event) => setResponseText(event.target.value)} placeholder="Write in Chinese. If you do not know a word, type it in English: 我晚上吃 dinner。" />
+          <div className="writing-tip"><b>English is allowed.</b><span>Plain English or [brackets] both work. It will be treated as a vocabulary request, not a grammar mistake.</span></div>
+          <div className="writing-actions">
+            <button onClick={saveDraft}>Save draft</button>
+            <button className="primary" onClick={reviewDraft} disabled={reviewing}>{reviewing ? "Reviewing…" : "Review my writing →"}</button>
+          </div>
+          {message && <p className="writing-message" role="status">{message}</p>}
+        </article>
+      </div>
+
+      {feedback && <WritingReview answer={responseText} feedback={feedback} />}
+
+      {history.length > 0 && (
+        <details className="writing-history">
+          <summary>Previous writing · {history.length}</summary>
+          <div>{history.slice(0, 8).map((attempt) => (
+            <button key={attempt.id} onClick={() => {
+              setMode(attempt.mode);
+              setLevel(attempt.hsk_level);
+              const savedPromptIndex = writingPrompts[attempt.mode][attempt.hsk_level].indexOf(attempt.prompt_text);
+              setPromptIndex(savedPromptIndex >= 0 ? savedPromptIndex : 0);
+              setResponseText(attempt.response_text);
+              setAttemptId(attempt.id);
+              try { setTargetWords(attempt.target_words_json ? JSON.parse(attempt.target_words_json) as string[] : []); } catch { setTargetWords([]); }
+              try { setFeedback(attempt.feedback_json ? JSON.parse(attempt.feedback_json) as WritingFeedback : null); } catch { setFeedback(null); }
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}>
+              <span>{new Date(attempt.updated_at).toLocaleDateString()} · HSK {attempt.hsk_level}</span>
+              <strong>{attempt.prompt_text}</strong>
+            </button>
+          ))}</div>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function WritingReview({ answer, feedback }: { answer: string; feedback: WritingFeedback }) {
+  const sections: Array<[string, ReviewSection]> = [
+    ["Task completion", feedback.taskCompletion],
+    ["Grammar & word order", feedback.grammarWordOrder],
+    ["Vocabulary & naturalness", feedback.vocabularyNaturalness],
+    ["Characters & typing", feedback.charactersTyping],
+  ];
+  return (
+    <section className="writing-review" aria-live="polite">
+      <header><span className={`review-verdict ${feedback.verdict}`}>{feedback.verdict === "clear" ? "Meaning is clear" : "Revise once"}</span><h2>Writing review</h2><p>{feedback.summary}</p></header>
+      <article className="current-answer"><span>YOUR CURRENT DRAFT</span><p>{answer}</p></article>
+      {feedback.placeholders.length > 0 && <div className="placeholder-help"><h3>Words you asked for</h3>{feedback.placeholders.map((item, index) => <article key={`${item.english}-${index}`}><span>{item.english}</span><strong>{item.chinese}</strong><em>{item.pinyin}</em><b>{item.hskLevel}</b><p>{item.note}</p></article>)}</div>}
+      <div className="review-grid">{sections.map(([label, section]) => <article key={label}><span className={`review-status ${section.status}`}>{section.status}</span><h3>{label}</h3><p>{section.feedback}</p></article>)}</div>
+      <article className="corrected-answer"><span>A NATURAL REVISION</span><strong>{feedback.correctedChinese}</strong><button onClick={() => speak(feedback.correctedChinese)}>A · Audio</button></article>
+      {feedback.changes.length > 0 && <div className="change-list"><h3>What changed</h3>{feedback.changes.map((change, index) => <p key={index}><del>{change.original}</del><ins>{change.replacement}</ins><span>{change.reason}</span></p>)}</div>}
+      <p className="revision-prompt"><b>Try once more:</b> {feedback.revisionPrompt}</p>
+    </section>
   );
 }
 
