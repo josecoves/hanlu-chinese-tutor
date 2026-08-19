@@ -590,6 +590,7 @@ function Settings({ syncState }: { syncState: SyncState }) {
         <article><b>Hosted curriculum</b><span>1,261 words · 12 stories · 90 grammar lessons</span></article>
         <article><b>Audio</b><span>Uses Mandarin speech available on the current device.</span></article>
         <article><b>Cloud progress</b><span>{syncState === "saved" ? "Story and grammar status sync privately across signed-in devices." : "Waiting for an internet connection before syncing."}</span></article>
+        <article><b>Hosted offline access</b><span>After one successful online visit, the app shell and curriculum are cached on this device. Private progress API responses are never cached.</span></article>
         <article><b>Offline learning data</b><span>Your existing local tutor data remains on your laptop and is never uploaded automatically.</span></article>
         <article><b>Open source</b><a href="https://github.com/josecoves/hanlu-chinese-tutor" target="_blank" rel="noreferrer">View source on GitHub ↗</a></article>
       </div>
