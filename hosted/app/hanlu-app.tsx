@@ -1286,10 +1286,10 @@ function Settings({ syncState, onImported }: { syncState: SyncState; onImported:
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const result = await response.json() as { error?: string; progress?: CloudProgress; imported?: { vocabulary: number; reviews: number; stories: number; grammar: number } };
+      const result = await response.json() as { error?: string; progress?: CloudProgress; imported?: { vocabulary: number; reviews: number; stories: number; grammar: number; externalReadings?: number } };
       if (!response.ok || !result.progress || !result.imported) throw new Error(result.error || "The import could not be completed.");
       onImported(result.progress);
-      setImportState(`Imported ${result.imported.vocabulary} vocabulary records, ${result.imported.reviews} reviews, ${result.imported.stories} stories, and ${result.imported.grammar} grammar statuses. An exact private backup was retained.`);
+      setImportState(`Imported ${result.imported.vocabulary} vocabulary records, ${result.imported.reviews} reviews, ${result.imported.stories} stories, ${result.imported.grammar} grammar statuses, and ${result.imported.externalReadings ?? 0} completed external readers. An exact private backup was retained.`);
       setSelectedFile(null);
       if (fileInput.current) fileInput.current.value = "";
     } catch (error) {
