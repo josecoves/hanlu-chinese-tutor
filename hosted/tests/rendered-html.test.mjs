@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -23,4 +24,15 @@ test("server-renders the Hanlu hosted beta", async () => {
   assert.match(html, /12/);
   assert.match(html, /90/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+});
+
+test("offline cache excludes private progress and authentication routes", async () => {
+  const serviceWorker = await readFile(
+    new URL("../public/sw.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(serviceWorker, /pathname\.startsWith\("\/api\/"\)/);
+  assert.match(serviceWorker, /pathname\.startsWith\("\/signin-with-chatgpt"\)/);
+  assert.match(serviceWorker, /networkFirstNavigation/);
+  assert.match(serviceWorker, /CACHE_APP_SHELL/);
 });

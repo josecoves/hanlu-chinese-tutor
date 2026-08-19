@@ -1,0 +1,10 @@
+{
+  "name": "汉路 Hanlu · Chinese Tutor",
+  "short_name": "Hanlu",
+  "description": "A private reading-first Chinese tutor.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f0e7",
+  "theme_color": "#b84f39"
+}

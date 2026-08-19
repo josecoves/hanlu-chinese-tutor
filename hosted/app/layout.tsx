@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { OfflineRegistration } from "./offline-registration";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,6 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(origin),
     title,
     description,
+    manifest: "/manifest.webmanifest",
     openGraph: { title, description, images: [{ url: image }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   };
@@ -30,7 +32,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>{children}<OfflineRegistration /></body>
     </html>
   );
 }
