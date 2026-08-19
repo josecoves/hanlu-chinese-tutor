@@ -23,6 +23,8 @@ test("server-renders the Hanlu hosted beta", async () => {
   assert.match(html, /1,261/);
   assert.match(html, /12/);
   assert.match(html, /90/);
+  assert.match(html, /Writing/);
+  assert.match(html, /Write something real/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
@@ -35,4 +37,26 @@ test("offline cache excludes private progress and authentication routes", async 
   assert.match(serviceWorker, /pathname\.startsWith\("\/signin-with-chatgpt"\)/);
   assert.match(serviceWorker, /networkFirstNavigation/);
   assert.match(serviceWorker, /CACHE_APP_SHELL/);
+});
+
+test("writing review keeps DeepSeek server-side and enforces small daily limits", async () => {
+  const route = await readFile(
+    new URL("../app/api/writing/review/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /DEEPSEEK_API_KEY/);
+  assert.match(route, /DAILY_REQUEST_LIMIT = 35/);
+  assert.match(route, /DAILY_BUDGET_MICRO_USD = 20_000/);
+  assert.doesNotMatch(route, /NEXT_PUBLIC_DEEPSEEK|apiKey:\s*["'][^"']+/);
+});
+
+test("the interface never declares text smaller than 14px", async () => {
+  const stylesheet = await readFile(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+  const undersized = [...stylesheet.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)]
+    .map((match) => Number(match[1]))
+    .filter((size) => size < 14);
+  assert.deepEqual(undersized, []);
 });
