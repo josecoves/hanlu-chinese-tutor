@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -21,11 +21,63 @@ test("server-renders the Hanlu hosted beta", async () => {
   assert.match(html, /<title>汉路 Hanlu · Chinese Tutor<\/title>/i);
   assert.match(html, /Chinese that lives in context/);
   assert.match(html, /1,261/);
-  assert.match(html, /12/);
+  assert.match(html, /18/);
   assert.match(html, /90/);
   assert.match(html, /Writing/);
   assert.match(html, /Write something real/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
+});
+
+test("hosted curriculum keeps the rich vocabulary and complete story export", async () => {
+  const data = JSON.parse(await readFile(
+    new URL("../app/hanlu-data.json", import.meta.url),
+    "utf8",
+  ));
+  assert.equal(data.words.length, 1261);
+  assert.equal(data.stories.length, 18);
+  assert.equal(data.grammar.length, 90);
+  assert.ok(data.words.every((word) => Array.isArray(word.hskLevels)));
+  assert.ok(data.words.every((word) => typeof word.audio === "string"));
+  assert.ok(data.stories.every((story) => Number.isInteger(story.hskLevel)));
+  assert.ok(data.stories.every((story) => story.sentences.every(
+    (sentence) => sentence.audio && Array.isArray(sentence.words),
+  )));
+});
+
+test("every hosted curriculum audio reference exists and is non-empty", async () => {
+  const data = JSON.parse(await readFile(
+    new URL("../app/hanlu-data.json", import.meta.url),
+    "utf8",
+  ));
+  const names = new Set([
+    ...data.words.map((word) => word.audio),
+    ...data.stories.flatMap((story) => story.sentences.map((sentence) => sentence.audio)),
+    ...data.grammar.flatMap((lesson) => lesson.examples.map((example) => example.audio)),
+  ]);
+  assert.ok(names.size > 1700);
+  for (const name of names) {
+    const info = await stat(new URL(`../public/audio/${name}`, import.meta.url));
+    assert.ok(info.size > 0, `${name} is empty`);
+  }
+});
+
+test("progress import is authenticated, private, and includes local learning dimensions", async () => {
+  const route = await readFile(
+    new URL("../app/api/progress/import/route.ts", import.meta.url),
+    "utf8",
+  );
+  const schema = await readFile(
+    new URL("../db/schema.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /getChatGPTUser/);
+  assert.match(route, /learner_import_backup/);
+  assert.match(route, /memory_state/);
+  assert.match(route, /review_log/);
+  assert.match(route, /grammar_state/);
+  assert.match(route, /story_sentence_progress/);
+  assert.match(route, /story_word_exposure/);
+  assert.match(schema, /learnerImportBackup/);
 });
 
 test("offline cache excludes private progress and authentication routes", async () => {

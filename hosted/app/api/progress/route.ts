@@ -10,19 +10,35 @@ async function getProgressDatabase() {
 
 type StoredStoryProgress = {
   sentenceIndex: number;
+  status?: "new" | "reading" | "finished";
   completedAt?: string;
+  completedSentences?: number[];
+  hardWords?: Record<string, number[]>;
+};
+
+type StoredVocabularyProgress = {
+  listeningScore?: number;
+  readingScore?: number;
+  practices: number;
+  lastReviewTs?: string;
+  needsPractice?: boolean;
+  known?: boolean;
 };
 
 type StoredProgress = {
-  version: 1;
+  version: 2;
+  declaredHskBand: number;
   stories: Record<string, StoredStoryProgress>;
   grammar: Record<string, "new" | "practicing" | "learned">;
+  vocabulary: Record<string, StoredVocabularyProgress>;
 };
 
 const EMPTY_PROGRESS: StoredProgress = {
-  version: 1,
+  version: 2,
+  declaredHskBand: 0,
   stories: {},
   grammar: {},
+  vocabulary: {},
 };
 
 function unauthorized() {
@@ -35,20 +51,42 @@ function unauthorized() {
 function normalizeProgress(value: unknown): StoredProgress | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const candidate = value as Record<string, unknown>;
-  if (candidate.version !== 1) return null;
+  if (candidate.version === 1) return migrateVersionOne(candidate);
+  if (candidate.version !== 2) return null;
   if (!isPlainRecord(candidate.stories) || !isPlainRecord(candidate.grammar)) return null;
+  if (!isPlainRecord(candidate.vocabulary)) return null;
 
   const stories: StoredProgress["stories"] = {};
   for (const [id, entry] of Object.entries(candidate.stories)) {
     if (!isPlainRecord(entry) || !isValidId(id)) return null;
     const sentenceIndex = entry.sentenceIndex;
-    if (!Number.isInteger(sentenceIndex) || sentenceIndex < 0 || sentenceIndex > 1_000) {
+    if (!Number.isInteger(sentenceIndex) || Number(sentenceIndex) < 0 || Number(sentenceIndex) > 1_000) {
       return null;
     }
     if (entry.completedAt !== undefined && typeof entry.completedAt !== "string") return null;
+    const completedSentences = Array.isArray(entry.completedSentences)
+      ? entry.completedSentences
+          .filter((item): item is number => Number.isInteger(item) && Number(item) >= 0 && Number(item) <= 1_000)
+          .slice(0, 1_000)
+      : [];
+    const hardWords: Record<string, number[]> = {};
+    if (isPlainRecord(entry.hardWords)) {
+      for (const [sentence, ids] of Object.entries(entry.hardWords)) {
+        if (!/^\d{1,4}$/.test(sentence) || !Array.isArray(ids)) continue;
+        hardWords[sentence] = ids
+          .filter((item): item is number => Number.isInteger(item) && Number(item) > 0)
+          .slice(0, 500);
+      }
+    }
+    const status = ["new", "reading", "finished"].includes(String(entry.status))
+      ? entry.status as StoredStoryProgress["status"]
+      : undefined;
     stories[id] = {
       sentenceIndex: sentenceIndex as number,
+      ...(status ? { status } : {}),
       ...(typeof entry.completedAt === "string" ? { completedAt: entry.completedAt } : {}),
+      ...(completedSentences.length ? { completedSentences } : {}),
+      ...(Object.keys(hardWords).length ? { hardWords } : {}),
     };
   }
 
@@ -60,11 +98,50 @@ function normalizeProgress(value: unknown): StoredProgress | null {
     grammar[id] = status as StoredProgress["grammar"][string];
   }
 
+  const vocabulary: StoredProgress["vocabulary"] = {};
+  for (const [id, entry] of Object.entries(candidate.vocabulary)) {
+    if (!isValidId(id) || !isPlainRecord(entry)) return null;
+    const practices = Number(entry.practices ?? 0);
+    if (!Number.isInteger(practices) || practices < 0 || practices > 1_000_000) return null;
+    const listeningScore = validScore(entry.listeningScore);
+    const readingScore = validScore(entry.readingScore);
+    vocabulary[id] = {
+      practices,
+      ...(listeningScore !== undefined ? { listeningScore } : {}),
+      ...(readingScore !== undefined ? { readingScore } : {}),
+      ...(typeof entry.lastReviewTs === "string" ? { lastReviewTs: entry.lastReviewTs } : {}),
+      ...(entry.needsPractice === true ? { needsPractice: true } : {}),
+      ...(typeof entry.known === "boolean" ? { known: entry.known } : {}),
+    };
+  }
+
   return {
-    version: 1,
+    version: 2,
+    declaredHskBand: [0, 1, 2, 3].includes(Number(candidate.declaredHskBand))
+      ? Number(candidate.declaredHskBand)
+      : 0,
     stories,
     grammar,
+    vocabulary,
   };
+}
+
+function migrateVersionOne(candidate: Record<string, unknown>): StoredProgress | null {
+  if (!isPlainRecord(candidate.stories) || !isPlainRecord(candidate.grammar)) return null;
+  return normalizeProgress({
+    version: 2,
+    declaredHskBand: 0,
+    stories: candidate.stories,
+    grammar: candidate.grammar,
+    vocabulary: {},
+  });
+}
+
+function validScore(value: unknown) {
+  const score = Number(value);
+  return Number.isFinite(score) && score >= 0 && score <= 100
+    ? Math.round(score)
+    : undefined;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -111,14 +188,14 @@ export async function PUT(request: Request) {
   }
 
   const serialized = JSON.stringify(progress);
-  if (serialized.length > 50_000) {
+  if (serialized.length > 350_000) {
     return NextResponse.json({ error: "Progress payload is too large." }, { status: 413 });
   }
 
   const db = await getProgressDatabase();
   await db.prepare(
     `INSERT INTO learner_progress (user_id, schema_version, progress_json, updated_at)
-     VALUES (?, 1, ?, ?)
+     VALUES (?, 2, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        schema_version = excluded.schema_version,
        progress_json = excluded.progress_json,
