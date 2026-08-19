@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { loadOfflineProgress, saveOfflineProgress } from "./offline-progress";
 
 type Word = {
   id: number;
@@ -80,6 +81,8 @@ export function HanluApp({ content }: { content: Content }) {
   });
   const [syncState, setSyncState] = useState<SyncState>("loading");
   const [progressLoaded, setProgressLoaded] = useState(false);
+  const [canSyncProgress, setCanSyncProgress] = useState(false);
+  const [syncAttempt, setSyncAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,10 +93,23 @@ export function HanluApp({ content }: { content: Content }) {
       })
       .then(({ progress: remoteProgress }) => {
         if (cancelled) return;
-        if (remoteProgress?.version === 1) setProgress(remoteProgress);
+        if (remoteProgress?.version === 1) {
+          setProgress(remoteProgress);
+          void saveOfflineProgress(remoteProgress);
+        }
+        setCanSyncProgress(true);
         setSyncState("saved");
       })
-      .catch(() => {
+      .catch(async () => {
+        try {
+          const cachedProgress = await loadOfflineProgress<CloudProgress>();
+          if (!cancelled && cachedProgress?.version === 1) {
+            setProgress(cachedProgress);
+            setCanSyncProgress(true);
+          }
+        } catch {
+          // Cloud sync can still be retried without an offline cache.
+        }
         if (!cancelled) setSyncState("offline");
       })
       .finally(() => {
@@ -103,8 +119,14 @@ export function HanluApp({ content }: { content: Content }) {
   }, []);
 
   useEffect(() => {
-    if (!progressLoaded) return;
+    if (!progressLoaded || !canSyncProgress) return;
+    void saveOfflineProgress(progress).catch(() => undefined);
+    if (!navigator.onLine) {
+      const timeout = window.setTimeout(() => setSyncState("offline"), 0);
+      return () => window.clearTimeout(timeout);
+    }
     const timeout = window.setTimeout(() => {
+      setSyncState("loading");
       void fetch("/api/progress", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -117,7 +139,13 @@ export function HanluApp({ content }: { content: Content }) {
         .catch(() => setSyncState("offline"));
     }, 500);
     return () => window.clearTimeout(timeout);
-  }, [progress, progressLoaded]);
+  }, [canSyncProgress, progress, progressLoaded, syncAttempt]);
+
+  useEffect(() => {
+    const retryWhenOnline = () => setSyncAttempt((attempt) => attempt + 1);
+    window.addEventListener("online", retryWhenOnline);
+    return () => window.removeEventListener("online", retryWhenOnline);
+  }, []);
 
   const topics = useMemo(() => {
     const grouped = new Map<string, { one: number; two: number }>();
@@ -163,6 +191,7 @@ export function HanluApp({ content }: { content: Content }) {
   };
 
   const updateStoryProgress = (id: number, index: number, total: number) => {
+    setCanSyncProgress(true);
     setProgress((current) => ({
       ...current,
       stories: {
@@ -176,6 +205,7 @@ export function HanluApp({ content }: { content: Content }) {
   };
 
   const updateGrammarStatus = (id: number, status: GrammarStatus) => {
+    setCanSyncProgress(true);
     setProgress((current) => ({
       ...current,
       grammar: { ...current.grammar, [id]: status },
@@ -261,7 +291,7 @@ export function HanluApp({ content }: { content: Content }) {
       </main>
 
       <footer>
-        <span>汉路 private hosted beta · {syncState === "saved" ? "progress synced" : syncState === "loading" ? "syncing progress" : "progress will retry when online"}</span>
+        <span>汉路 private hosted beta · {syncState === "saved" ? "progress synced" : syncState === "loading" ? "syncing progress" : "saved on this device · sync queued"}</span>
         <a
           href="https://github.com/josecoves/hanlu-chinese-tutor"
           target="_blank"
@@ -547,7 +577,7 @@ function Progress({
         <article><span>Grammar in progress</span><strong>{practicingGrammar}</strong></article>
         <article><span>Grammar learned</span><strong>{learnedGrammar}</strong></article>
       </div>
-      <div className="notice-card"><span>{syncState === "saved" ? "SAVED PRIVATELY" : "WAITING FOR CONNECTION"}</span><h2>{syncState === "saved" ? "Your progress is synced." : "Your progress will retry when you are online."}</h2><p>The original local tutor remains unchanged and private on this laptop. Its existing FSRS review history will be migrated only after an explicit import step, so nothing is overwritten.</p><strong>AI reviews, full spaced repetition, and offline queued edits are the next sync milestone.</strong></div>
+      <div className="notice-card"><span>{syncState === "saved" ? "SAVED PRIVATELY" : "SAVED ON THIS DEVICE"}</span><h2>{syncState === "saved" ? "Your progress is synced." : "Your progress will sync when this device is back online."}</h2><p>The original local tutor remains unchanged and private on this laptop. Its existing FSRS review history will be migrated only after an explicit import step, so nothing is overwritten.</p><strong>AI reviews and full spaced repetition are the next sync milestone.</strong></div>
     </section>
   );
 }
