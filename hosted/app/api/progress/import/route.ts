@@ -100,29 +100,6 @@ export async function POST(request: Request) {
     const updatedAt = typeof override.updated_ts === "string" ? override.updated_ts : undefined;
     vocabulary[id] = { ...(vocabulary[id] ?? { practices: 0 }), needsPractice: true, known: false, ...(updatedAt ? { updatedAt } : {}) };
   }
-  for (const cloudState of rows(payload.cloud_vocabulary_progress)) {
-    const word = wordByHeadword.get(String(cloudState.headword ?? ""));
-    if (!word) continue;
-    const id = String(word.id);
-    const current = vocabulary[id] ?? { practices: 0 };
-    const updatedAt = typeof cloudState.updated_ts === "string" ? cloudState.updated_ts : "";
-    if (updatedAt && updatedAt < String(current.updatedAt ?? current.lastReviewTs ?? "")) continue;
-    vocabulary[id] = {
-      practices: Math.max(current.practices, boundedInteger(cloudState.practices, 0, 1_000_000)),
-      ...(validScore(cloudState.listening_score) ?? current.listeningScore) !== undefined
-        ? { listeningScore: validScore(cloudState.listening_score) ?? current.listeningScore } : {},
-      ...(validScore(cloudState.reading_score) ?? current.readingScore) !== undefined
-        ? { readingScore: validScore(cloudState.reading_score) ?? current.readingScore } : {},
-      ...((typeof cloudState.last_review_ts === "string" ? cloudState.last_review_ts : current.lastReviewTs)
-        ? { lastReviewTs: typeof cloudState.last_review_ts === "string" ? cloudState.last_review_ts : current.lastReviewTs } : {}),
-      ...(typeof cloudState.needs_practice === "number" || typeof cloudState.needs_practice === "boolean"
-        ? { needsPractice: Boolean(cloudState.needs_practice) } : {}),
-      ...(typeof cloudState.known === "number" || typeof cloudState.known === "boolean"
-        ? { known: Boolean(cloudState.known) } : {}),
-      ...(updatedAt ? { updatedAt } : {}),
-    };
-  }
-
   const stories: Record<string, RecordValue> = {};
   for (const state of rows(payload.story_state)) {
     const story = storyByTitle.get(String(state.title_zh ?? ""));

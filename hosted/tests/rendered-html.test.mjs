@@ -100,7 +100,6 @@ test("progress import is authenticated, private, and includes local learning dim
   assert.match(route, /story_word_exposure/);
   assert.match(route, /external_resource_progress/);
   assert.match(route, /external_readings/);
-  assert.match(route, /cloud_vocabulary_progress/);
   assert.match(schema, /learnerImportBackup/);
 });
 
