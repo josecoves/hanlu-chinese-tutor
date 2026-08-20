@@ -91,7 +91,7 @@ test("progress import is authenticated, private, and includes local learning dim
     new URL("../db/schema.ts", import.meta.url),
     "utf8",
   );
-  assert.match(route, /getChatGPTUser/);
+  assert.match(route, /getProgressUser/);
   assert.match(route, /learner_import_backup/);
   assert.match(route, /memory_state/);
   assert.match(route, /review_log/);
@@ -100,7 +100,21 @@ test("progress import is authenticated, private, and includes local learning dim
   assert.match(route, /story_word_exposure/);
   assert.match(route, /external_resource_progress/);
   assert.match(route, /external_readings/);
+  assert.match(route, /cloud_vocabulary_progress/);
   assert.match(schema, /learnerImportBackup/);
+});
+
+test("automatic local sync requires both platform bypass and an app-specific secret", async () => {
+  const syncRoute = await readFile(new URL("../app/api/sync/route.ts", import.meta.url), "utf8");
+  const auth = await readFile(new URL("../app/api/sync-auth.ts", import.meta.url), "utf8");
+  const model = await readFile(new URL("../app/api/progress/model.ts", import.meta.url), "utf8");
+  assert.match(syncRoute, /getProgressUser/);
+  assert.match(syncRoute, /externalReadings/);
+  assert.match(auth, /x-hanlu-sync-key/);
+  assert.match(auth, /HANLU_SYNC_KEY/);
+  assert.match(auth, /HANLU_SYNC_USER_ID/);
+  assert.match(model, /mergeProgress/);
+  assert.doesNotMatch(auth, /HANLU_SYNC_KEY\s*=\s*["'][^"']+/);
 });
 
 test("offline cache excludes private progress and authentication routes", async () => {

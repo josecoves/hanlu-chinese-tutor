@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getChatGPTUser } from "../../../chatgpt-auth";
 import content from "../../../hanlu-data.json";
+import { getProgressUser } from "../../sync-auth";
+import { EMPTY_PROGRESS, mergeProgress, normalizeProgress } from "../model";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ type VocabularySummary = {
   lastReviewTs?: string;
   needsPractice?: boolean;
   known?: boolean;
+  updatedAt?: string;
 };
 
 function record(value: unknown): value is RecordValue {
@@ -23,7 +25,7 @@ function rows(value: unknown): RecordValue[] {
 }
 
 export async function POST(request: Request) {
-  const user = await getChatGPTUser();
+  const user = await getProgressUser(request);
   if (!user) {
     return NextResponse.json({ error: "Sign in is required to import progress." }, { status: 401 });
   }
@@ -60,6 +62,9 @@ export async function POST(request: Request) {
     const score = retrievabilityScore(state);
     if (state.facet === "listening" && score !== undefined) summary.listeningScore = score;
     if (state.facet === "reading-recognition" && score !== undefined) summary.readingScore = score;
+    if (typeof state.last_review_ts === "string" && (!summary.updatedAt || state.last_review_ts > summary.updatedAt)) {
+      summary.updatedAt = state.last_review_ts;
+    }
     vocabulary[id] = summary;
   }
 
@@ -72,6 +77,7 @@ export async function POST(request: Request) {
     summary.practices += 1;
     const ts = String(review.ts ?? "");
     if (!summary.lastReviewTs || ts > summary.lastReviewTs) summary.lastReviewTs = ts;
+    if (!summary.updatedAt || ts > summary.updatedAt) summary.updatedAt = ts;
     const current = latestGrade.get(id);
     if (!current || ts > current.ts) latestGrade.set(id, { grade: Number(review.grade), ts });
     vocabulary[id] = summary;
@@ -91,7 +97,30 @@ export async function POST(request: Request) {
     const word = wordByHeadword.get(String(override.headword ?? ""));
     if (!word || override.status !== "needs_practice") continue;
     const id = String(word.id);
-    vocabulary[id] = { ...(vocabulary[id] ?? { practices: 0 }), needsPractice: true, known: false };
+    const updatedAt = typeof override.updated_ts === "string" ? override.updated_ts : undefined;
+    vocabulary[id] = { ...(vocabulary[id] ?? { practices: 0 }), needsPractice: true, known: false, ...(updatedAt ? { updatedAt } : {}) };
+  }
+  for (const cloudState of rows(payload.cloud_vocabulary_progress)) {
+    const word = wordByHeadword.get(String(cloudState.headword ?? ""));
+    if (!word) continue;
+    const id = String(word.id);
+    const current = vocabulary[id] ?? { practices: 0 };
+    const updatedAt = typeof cloudState.updated_ts === "string" ? cloudState.updated_ts : "";
+    if (updatedAt && updatedAt < String(current.updatedAt ?? current.lastReviewTs ?? "")) continue;
+    vocabulary[id] = {
+      practices: Math.max(current.practices, boundedInteger(cloudState.practices, 0, 1_000_000)),
+      ...(validScore(cloudState.listening_score) ?? current.listeningScore) !== undefined
+        ? { listeningScore: validScore(cloudState.listening_score) ?? current.listeningScore } : {},
+      ...(validScore(cloudState.reading_score) ?? current.readingScore) !== undefined
+        ? { readingScore: validScore(cloudState.reading_score) ?? current.readingScore } : {},
+      ...((typeof cloudState.last_review_ts === "string" ? cloudState.last_review_ts : current.lastReviewTs)
+        ? { lastReviewTs: typeof cloudState.last_review_ts === "string" ? cloudState.last_review_ts : current.lastReviewTs } : {}),
+      ...(typeof cloudState.needs_practice === "number" || typeof cloudState.needs_practice === "boolean"
+        ? { needsPractice: Boolean(cloudState.needs_practice) } : {}),
+      ...(typeof cloudState.known === "number" || typeof cloudState.known === "boolean"
+        ? { known: Boolean(cloudState.known) } : {}),
+      ...(updatedAt ? { updatedAt } : {}),
+    };
   }
 
   const stories: Record<string, RecordValue> = {};
@@ -102,6 +131,7 @@ export async function POST(request: Request) {
       sentenceIndex: boundedInteger(state.current_index, 0, Math.max(0, story.sentences.length - 1)),
       status: ["new", "reading", "finished"].includes(String(state.status)) ? state.status : "new",
       ...(state.status === "finished" ? { completedAt: String(state.updated_ts ?? new Date().toISOString()) } : {}),
+      ...(typeof state.updated_ts === "string" ? { updatedAt: state.updated_ts } : {}),
       completedSentences: [],
       hardWords: {},
     };
@@ -115,6 +145,7 @@ export async function POST(request: Request) {
     const index = boundedInteger(sentence.sentence_index, 0, Math.max(0, story.sentences.length - 1));
     if (!completed.includes(index)) completed.push(index);
     state.completedSentences = completed.sort((a, b) => a - b);
+    if (typeof sentence.completed_ts === "string" && sentence.completed_ts > String(state.updatedAt ?? "")) state.updatedAt = sentence.completed_ts;
     stories[id] = state;
   }
   for (const exposure of rows(payload.story_word_exposure)) {
@@ -130,24 +161,37 @@ export async function POST(request: Request) {
     if (!ids.includes(word.id)) ids.push(word.id);
     hardWords[sentence] = ids;
     state.hardWords = hardWords;
+    if (typeof exposure.updated_ts === "string" && exposure.updated_ts > String(state.updatedAt ?? "")) state.updatedAt = exposure.updated_ts;
     stories[id] = state;
   }
 
   const grammar: Record<string, "new" | "practicing" | "learned"> = {};
+  const grammarUpdatedAt: Record<string, string> = {};
   for (const state of rows(payload.grammar_state)) {
     const lesson = grammarByTitle.get(`${Number(state.level)}:${String(state.title_en ?? "")}`);
     if (!lesson) continue;
     const status = String(state.status);
     grammar[String(lesson.id)] = status === "learned" ? "learned" : status === "practicing" ? "practicing" : "new";
+    if (typeof state.updated_ts === "string") grammarUpdatedAt[String(lesson.id)] = state.updated_ts;
   }
   for (const attempt of rows(payload.grammar_attempt)) {
     const lesson = grammarByTitle.get(`${Number(attempt.level)}:${String(attempt.title_en ?? "")}`);
     if (lesson && !grammar[String(lesson.id)]) grammar[String(lesson.id)] = "practicing";
+    if (lesson && typeof attempt.ts === "string" && attempt.ts > String(grammarUpdatedAt[String(lesson.id)] ?? "")) {
+      grammarUpdatedAt[String(lesson.id)] = attempt.ts;
+    }
   }
 
-  const progress = { version: 2, declaredHskBand, stories, grammar, vocabulary };
   const now = new Date().toISOString();
   const { env } = await import("cloudflare:workers");
+  const incoming = normalizeProgress({ version: 2, declaredHskBand, stories, grammar, grammarUpdatedAt, vocabulary });
+  if (!incoming) return NextResponse.json({ error: "The imported progress could not be normalized." }, { status: 400 });
+  const existingRow = await env.DB.prepare("SELECT progress_json FROM learner_progress WHERE user_id=?")
+    .bind(user.id).first<{ progress_json: string }>();
+  let existing = EMPTY_PROGRESS;
+  try { existing = existingRow ? normalizeProgress(JSON.parse(existingRow.progress_json)) ?? EMPTY_PROGRESS : EMPTY_PROGRESS; }
+  catch { existing = EMPTY_PROGRESS; }
+  const progress = mergeProgress(existing, incoming);
   const externalStatements = rows(payload.external_resource_progress).flatMap((resource) => {
     const resourceId = String(resource.resource_id ?? "");
     if (!resourceId.startsWith("reading:")) return [];
@@ -172,7 +216,8 @@ export async function POST(request: Request) {
        ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,hsk_level=excluded.hsk_level,
          title=excluded.title,url=excluded.url,status=excluded.status,hard_words=excluded.hard_words,
          notes=excluded.notes,opened_at=excluded.opened_at,completed_at=excluded.completed_at,
-         updated_at=excluded.updated_at WHERE external_readings.user_id=excluded.user_id`,
+         updated_at=excluded.updated_at WHERE external_readings.user_id=excluded.user_id
+           AND excluded.updated_at>=external_readings.updated_at`,
     ).bind(id,user.id,provider,hskLevel,title,url,status,hardWords,recap,openedAt,completedAt,updatedAt,updatedAt)];
   });
   await env.DB.batch([

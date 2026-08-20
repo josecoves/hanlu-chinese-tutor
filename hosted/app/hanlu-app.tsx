@@ -47,6 +47,7 @@ type StoryProgress = {
   completedAt?: string;
   completedSentences?: number[];
   hardWords?: Record<string, number[]>;
+  updatedAt?: string;
 };
 type VocabularyProgress = {
   listeningScore?: number;
@@ -55,6 +56,7 @@ type VocabularyProgress = {
   lastReviewTs?: string;
   needsPractice?: boolean;
   known?: boolean;
+  updatedAt?: string;
 };
 type GrammarStatus = "new" | "practicing" | "learned";
 type CloudProgress = {
@@ -62,6 +64,7 @@ type CloudProgress = {
   declaredHskBand: number;
   stories: Record<string, StoryProgress>;
   grammar: Record<string, GrammarStatus>;
+  grammarUpdatedAt?: Record<string, string>;
   vocabulary: Record<string, VocabularyProgress>;
 };
 type SyncState = "loading" | "saved" | "offline";
@@ -144,6 +147,7 @@ export function HanluApp({ content }: { content: Content }) {
     declaredHskBand: 0,
     stories: {},
     grammar: {},
+    grammarUpdatedAt: {},
     vocabulary: {},
   });
   const [syncState, setSyncState] = useState<SyncState>("loading");
@@ -199,8 +203,13 @@ export function HanluApp({ content }: { content: Content }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(progress),
       })
-        .then((response) => {
+      .then(async (response) => {
           if (!response.ok) throw new Error("Progress save failed");
+          const result = await response.json() as { progress?: CloudProgress };
+          if (result.progress?.version === 2) {
+            setProgress(result.progress);
+            void saveOfflineProgress(result.progress);
+          }
           setSyncState("saved");
         })
         .catch(() => setSyncState("offline"));
@@ -275,17 +284,19 @@ export function HanluApp({ content }: { content: Content }) {
   };
 
   const updateVocabularyProgress = (id: number, update: (current: VocabularyProgress) => VocabularyProgress) => {
+    const updatedAt = new Date().toISOString();
     setCanSyncProgress(true);
     setProgress((current) => ({
       ...current,
       vocabulary: {
         ...current.vocabulary,
-        [id]: update(current.vocabulary[String(id)] ?? { practices: 0 }),
+        [id]: { ...update(current.vocabulary[String(id)] ?? { practices: 0 }), updatedAt },
       },
     }));
   };
 
   const completeStorySentence = (story: Story, index: number, hardWordIds: number[]) => {
+    const updatedAt = new Date().toISOString();
     setCanSyncProgress(true);
     setProgress((current) => {
       const existing = current.stories[String(story.id)] ?? { sentenceIndex: 0 };
@@ -297,7 +308,7 @@ export function HanluApp({ content }: { content: Content }) {
       for (const word of story.sentences[index].words) {
         const wordState = vocabulary[String(word.id)] ?? { practices: 0 };
         if (hardWordIds.includes(word.id)) {
-          vocabulary[String(word.id)] = { ...wordState, needsPractice: true, known: false };
+          vocabulary[String(word.id)] = { ...wordState, needsPractice: true, known: false, updatedAt };
         }
       }
       return {
@@ -311,7 +322,8 @@ export function HanluApp({ content }: { content: Content }) {
             status: finished ? "finished" : "reading",
             completedSentences: [...completed].sort((a, b) => a - b),
             hardWords,
-            ...(finished ? { completedAt: new Date().toISOString() } : {}),
+            ...(finished ? { completedAt: updatedAt } : {}),
+            updatedAt,
           },
         },
       };
@@ -319,10 +331,12 @@ export function HanluApp({ content }: { content: Content }) {
   };
 
   const updateGrammarStatus = (id: number, status: GrammarStatus) => {
+    const updatedAt = new Date().toISOString();
     setCanSyncProgress(true);
     setProgress((current) => ({
       ...current,
       grammar: { ...current.grammar, [id]: status },
+      grammarUpdatedAt: { ...(current.grammarUpdatedAt ?? {}), [id]: updatedAt },
     }));
   };
 
@@ -396,7 +410,7 @@ export function HanluApp({ content }: { content: Content }) {
             onCompleteSentence={completeStorySentence}
             onStatus={(id, status) => {
               setCanSyncProgress(true);
-              setProgress((current) => ({ ...current, stories: { ...current.stories, [id]: { ...(current.stories[String(id)] ?? { sentenceIndex: 0 }), status, ...(status === "finished" ? { completedAt: new Date().toISOString() } : {}) } } }));
+              setProgress((current) => { const updatedAt = new Date().toISOString(); return ({ ...current, stories: { ...current.stories, [id]: { ...(current.stories[String(id)] ?? { sentenceIndex: 0 }), status, ...(status === "finished" ? { completedAt: updatedAt } : {}), updatedAt } } }); });
             }}
           />
         )}
@@ -1264,7 +1278,7 @@ function Progress({
         <article><span>Grammar in progress</span><strong>{practicingGrammar}</strong></article>
         <article><span>Grammar learned</span><strong>{learnedGrammar}</strong></article>
       </div>
-      <div className="notice-card"><span>{syncState === "saved" ? "SAVED PRIVATELY" : "SAVED ON THIS DEVICE"}</span><h2>{syncState === "saved" ? "Your progress is synced." : "Your progress will sync when this device is back online."}</h2><p>The original local tutor remains unchanged on this laptop. Use Settings to import a fresh local progress export; Hanlu keeps an exact private backup before creating the cloud summary.</p><strong>Filtered vocabulary review, grammar practice, writing review, and external-reader tracking are available in the private cloud app.</strong></div>
+      <div className="notice-card"><span>{syncState === "saved" ? "SAVED PRIVATELY" : "SAVED ON THIS DEVICE"}</span><h2>{syncState === "saved" ? "Your progress is synced." : "Your progress will sync when this device is back online."}</h2><p>The local tutor now exchanges progress automatically whenever its server is running and online. Manual JSON import remains available only for backup and recovery.</p><strong>Filtered vocabulary review, grammar practice, writing review, and external-reader tracking are available in the private cloud app.</strong></div>
     </section>
   );
 }
@@ -1301,20 +1315,20 @@ function Settings({ syncState, onImported }: { syncState: SyncState; onImported:
 
   return (
     <section className="page narrow">
-      <PageHead eyebrow="PRIVATE CLOUD SETTINGS" title="Settings" text="Keep the hosted app aligned with the richer local Hanlu data without overwriting the laptop database." />
+      <PageHead eyebrow="PRIVATE CLOUD SETTINGS" title="Settings" text="Local and hosted Hanlu now reconcile progress automatically while the local server is running." />
       <section className="import-card">
-        <span className="eyebrow">RESTORE LOCAL PROGRESS</span>
-        <h2>Import a Hanlu progress export</h2>
-        <p>Choose a fresh Hanlu JSON export. Nothing is uploaded until you press <b>Import selected file</b>. An exact private recovery copy is retained.</p>
+        <span className="eyebrow">BACKUP & RECOVERY</span>
+        <h2>Restore from a Hanlu progress export</h2>
+        <p>Routine imports are no longer needed. Choose a JSON export only when restoring an older backup; Hanlu retains an exact private recovery copy.</p>
         <div className="import-picker"><input ref={fileInput} id="progress-import" type="file" accept="application/json,.json" disabled={importing} onChange={(event) => { setSelectedFile(event.target.files?.[0] ?? null); setImportState(""); }} /><label htmlFor="progress-import" className={importing ? "disabled" : ""}>{selectedFile ? "Choose another file" : "Choose JSON file"}</label><div><strong>{selectedFile?.name ?? "No file selected"}</strong><span>{selectedFile ? `${Math.max(1,Math.round(selectedFile.size/1024))} KB · ready to import` : "Recommended: Hanlu-progress-2026-08-19.json in Downloads"}</span></div><button className="primary" disabled={!selectedFile||importing} onClick={()=>void importProgress()}>{importing?"Importing…":"Import selected file"}</button></div>
         {importState && <p className="import-state" role="status">{importState}</p>}
       </section>
       <div className="settings-list">
         <article><b>Hosted curriculum</b><span>1,261 words · 18 stories · 90 grammar lessons</span></article>
         <article><b>Audio</b><span>Uses the same cached Mandarin neural clips as the local tutor, with device speech only as a fallback.</span></article>
-        <article><b>Cloud progress</b><span>{syncState === "saved" ? "Vocabulary, story, and grammar status sync privately across signed-in devices." : "Waiting for an internet connection before syncing."}</span></article>
+        <article><b>Cloud progress</b><span>{syncState === "saved" ? "Vocabulary, story, grammar, and external-reading progress sync privately across signed-in devices and the local tutor." : "Waiting for an internet connection before syncing."}</span></article>
         <article><b>Hosted offline access</b><span>After one successful online visit, the app shell and curriculum are cached on this device. Private progress API responses are never cached.</span></article>
-        <article><b>Offline learning data</b><span>Your existing local tutor data remains on your laptop and is never uploaded automatically.</span></article>
+        <article><b>Offline learning data</b><span>You can keep studying locally without internet. Changes merge automatically after the server reconnects.</span></article>
         <article><b>Open source</b><a href="https://github.com/josecoves/hanlu-chinese-tutor" target="_blank" rel="noreferrer">View source on GitHub ↗</a></article>
       </div>
     </section>
